@@ -16,6 +16,8 @@
 
 %token<int64> INT
 
+%token<string> CHAR STRING
+
 
 %start<HopixAST.t> program
 
@@ -24,6 +26,13 @@
 program: EOF
 {
    []
+
+
+
+
+
+
+
 }
 
 %inline located(X): x=X {
