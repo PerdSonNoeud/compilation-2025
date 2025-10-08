@@ -3,6 +3,7 @@
   open Error
   open Position
   open HopixParser
+open Mint
 
   let next_line_and f lexbuf  =
     Lexing.new_line lexbuf;
@@ -76,10 +77,10 @@ rule token = parse
   | upper identchar* as id       { CONSTR id }
 
   (** Littéraux entiers *)
-  | '-'? digit+ as n             { INT (Int64.of_string n) }
-  | "0x" ['0'-'9' 'a'-'f' 'A' - 'F']+ as n   { INT (Int64.of_string n) }
-  | "0b" ['0'-'1']+ as n         { INT (Int64.of_string n) }
-  | "0o" ['0'-'7']+ as n         { INT (Int64.of_string n) }
+  | '-'? digit+ as n             { INT (Mint.of_string n) }
+  | "0x" ['0'-'9' 'a'-'f' 'A' - 'F']+ as n   { INT (Mint.of_string n) }
+  | "0b" ['0'-'1']+ as n         { INT (Mint.of_string n) }
+  | "0o" ['0'-'7']+ as n         { INT (Mint.of_string n) }
 
 
   (**caractères et chaines*)
@@ -87,7 +88,7 @@ rule token = parse
   | "’" (atom) "’" as a          { CHAR a }
 
 
-  | '"' (atom | '\'' | "\\\"" # '"')* '"' as s     { STRING s}
+  | '"' (atom | '\'' | "\"" # '"')* '"' as s     { STRING s}
 
 
 
