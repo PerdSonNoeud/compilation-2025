@@ -87,7 +87,7 @@ rule token = parse
   | "’" (atom) "’" as a          { CHAR a }
 
 
-  | '"' (atom | '\'' | "\"" # '"')* '"' as s     { STRING s}
+  | '"' (atom | '\'' | "\\\"" # '"')* '"' as s     { STRING s}
 
 
 
