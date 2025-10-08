@@ -72,7 +72,7 @@ rule token = parse
 
 
   (** Identificateurs *)
-  | "'" lower identchar* as id   { TYPE_VARIABLE id }
+  | "`" lower identchar* as id   { TYPE_VARIABLE id }
   | lower identchar* as id       { IDENT id }
   | upper identchar* as id       { CONSTR id }
 
@@ -97,7 +97,10 @@ rule token = parse
   | ")"             { RPAREN }
   | "{"             { LBRACE }
   | "}"             { RBRACE }
+  | "|"             { BAR }
+  | ","             { COM }
   | ";"             { SEMI }
+  | ":"             { DOUBLE_POINT }
   | "="             { EQ }
   | "+"             { PLUS }
   | "-"             { MINUS }
@@ -105,6 +108,8 @@ rule token = parse
   | "/"             { DIV }
   | "&&"            { AND }
   | "||"            { OR }
+  | "<"             { INF }
+  | ">"             { SUP }
   | "<=?"           { LEQ }
   | ">=?"           { GEQ }
   | "<?"            { LT }
