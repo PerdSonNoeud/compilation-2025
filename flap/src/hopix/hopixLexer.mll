@@ -97,6 +97,8 @@ rule token = parse
   | ")"             { RPAREN }
   | "{"             { LBRACE }
   | "}"             { RBRACE }
+  | "["             { LCROCHET }
+  | "]"             { RCROCHET }
   | "|"             { BAR }
   | ","             { COM }
   | ";"             { SEMI }
@@ -104,7 +106,7 @@ rule token = parse
   | "="             { EQ }
   | "+"             { PLUS }
   | "-"             { MINUS }
-  | "*"             { TIMES }
+  | "*"             { STAR }
   | "/"             { DIV }
   | "&&"            { AND }
   | "||"            { OR }
@@ -114,7 +116,8 @@ rule token = parse
   | ">=?"           { GEQ }
   | "<?"            { LT }
   | ">?"            { GT }
-  | "=?"           { EQEQ }
+  | "=?"            { EQEQ }
+  | "->"            { ARROW }
 
                
 
