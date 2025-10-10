@@ -105,8 +105,8 @@ type_uplets :
     | t1 = type_uplets STAR t2= type_app { t1@[t2] }
 
 type_app : 
-    | t1 = type_con INF t2 = type_list SUP {Position.with_poss $startpos $endpos(TyCon( t1, t2)) }
-    | t = type_con { Position.with_poss $startpos $endpos(TyCon(t, [])) }
+    | t1 = located(type_con) INF t2 = located(type_list) SUP {loc_tyCon t1 t2 }
+    | t = located(type_con) { loc_tyCon t (Position.unknown_pos []) }
     | v = located(type_var) { loc_tyVar v }
     | LPAREN t = type_expr RPAREN { t }
 
@@ -124,8 +124,6 @@ type_var:
 
 type_scheme : 
     | LCROCHET l = liste_variable RCROCHET t= type_expr { ForallTy(l,t) }
-
-
 
 
 
