@@ -14,6 +14,7 @@
   let loc_kid x = map_loc (fun s -> KId s) x
   let loc_tid x = map_loc (fun s -> TId s) x
   let loc_tyVar x = map_loc (fun s -> TyVar s) x
+  let loc_lid x = map_loc (fun s -> LId s) x
 
   let loc_tyTuple x = map_loc (fun s -> TyTuple s) x 
 
@@ -56,7 +57,24 @@ definition:
     | EXTERN v=located(IDENT) DOUBLE_POINT t = located(type_scheme) { 
         (DeclareExtern(loc_id v ,t)) }
 
-    (*| v=vdef         { DefineValue(v) }*)
+    (*| v=vdefinition         { DefineValue(v) }*)
+
+
+
+tdefinition :
+    | bar_opt i = located(CONSTR) l = option_type_list xs = liste_constr { DefineSumType((loc_kid i, l)::xs) }
+    | LBRACE i = located(IDENT) DOUBLE_POINT t = type_expr l = liste_label RBRACE { DefineRecordType((loc_lid i ,t)::l) }
+
+liste_label :
+    | COM i = located(IDENT) DOUBLE_POINT t = type_expr l = liste_label { ((loc_lid i),t)::l }
+    | { [] }
+
+
+(*
+vdefinition :
+    | LET v=located(IDENT) opt_sheme EQ e = expr {  }
+    | FUN f=fundef l = liste_fun {  }
+*)
 
 opt_def:
     | EQ a=  tdefinition {a}
@@ -68,10 +86,13 @@ liste_variable :
     | i = located(TYPE_VARIABLE) { [loc_tid i] }
 
 
+bar_opt :
+    | BAR {}
+    | {}
 
-
-tdefinition :
-    | BAR i = located(CONSTR) l = option_type_list { DefineSumType[ (loc_kid i, l) ] }
+liste_constr :
+    | BAR i = located(CONSTR) l = option_type_list xs = liste_constr { (loc_kid i, l)::xs }
+    | { [] }
 
 
 option_type_list:
@@ -82,7 +103,11 @@ liste_tDef :
     | t = type_expr { [t] }
     | t1 = type_expr COM t2 = liste_tDef { t1::t2}
 
-
+(*
+liste_fun :
+    | AND f = fundef l = liste_fun {  }
+    | {  }
+*)
 
 (**syntaxe des types*)
 
