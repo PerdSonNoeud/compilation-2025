@@ -233,7 +233,7 @@ expr_atom:
   | MATCH LPAREN e=located(expr) RPAREN LBRACE b=branches RBRACE { loc_case e b }
   | ite=located(if_then_else) { ite }
   | WHILE LPAREN e1=located(expr) RPAREN LBRACE e2=located(expr) RBRACE { loc_while e1 e2 }
-  | DO LBRACE e1=located(expr) RBRACE LPAREN e2=located(expr) RPAREN { loc_while e1 e2}
+  | DO LBRACE e1=located(expr) RBRACE UNTIL LPAREN e2=located(expr) RPAREN { loc_while e1 e2}
   | FOR v=located(IDENT) FROM e1=expr TO e2=expr LBRACE e3=expr RBRACE { loc_for (loc_id v) e1 e2 e3 }
   | REF e=located(expr)            { loc_ref e }
   | EXL e=located(expr)            { loc_read e }
