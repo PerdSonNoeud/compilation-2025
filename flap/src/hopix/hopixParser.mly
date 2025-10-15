@@ -147,7 +147,7 @@ expr:
   | e1=expr b=binop e2=expr { Apply(Apply(Variable(b, None), e1), e2) }
   (* Others *)
   | MATCH LPAREN e=expr RPAREN LBRACE b=branches RBRACE { Case(e, b) }
-  | IF LPAREN e1=expr RPAREN THEN LBRACE e2=expr RPAREN { IfThenElse(e1, e2) } (* TODO: Else *)
+  | IF LPAREN e1=expr RPAREN THEN LBRACE e2=expr RPAREN el=else_expr { IfThenElse(e1, e2, el) }
   | LPAREN t=uplet_expr RPAREN { Tuple(t) }
   | LBRACE l=separated_nonempty_list(COM, label) RBRACE { Record(l, None) } (* TODO: Type list option *)
   | e=expr DOT l=located(IDENT) { Field(e, loc_id l, None) } (* TODO: Type list option *)
@@ -171,6 +171,10 @@ expr_atom:
   | x=located(CONSTR)     { Tagged(loc_kid x, None, None) } (* TODO: Type list option & Expr list option *)
   | LPAREN RPAREN         { Tuple([]) }
   | LPAREN e=expr RBRACE  { e }
+
+else_expr:
+  | ELSE LBRACE e=expr RBRACE { Some e }
+  |                           { None }
 
 uplet_expr:
   | e1=expr COM e2=expr t=uplet_rest { e1 :: e2 :: t }
