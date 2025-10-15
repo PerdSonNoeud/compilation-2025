@@ -110,3 +110,8 @@ val cpos : Lexing.lexbuf -> t
 (** [string_of_cpos p] returns a string representation of
     the lexer's current position. *)
 val string_of_cpos : Lexing.lexbuf -> string
+
+
+val join_located : 'a located -> 'b located -> ('a -> 'b -> 'c) -> 'c located
+
+val join_located_list : 'a located list -> ('a list -> 'b) -> 'b located

@@ -3,7 +3,11 @@
   open Error
   open Position
   open HopixParser
+<<<<<<< HEAD
   open Mint
+=======
+open Mint
+>>>>>>> Jalon_1
 
   let next_line_and f lexbuf  =
     Lexing.new_line lexbuf;
@@ -62,42 +66,50 @@ rule token = parse
   | upper identchar* as id       { CONSTR id }
 
   (** Littéraux entiers *)
-  | '-'? digit+ as n             { INT (Mint.to_string n) }
-  | "0x" ['0'-'9' 'a'-'f' 'A' - 'F']+ as n   { INT (Mint.to_string n) }
-  | "0b" ['0'-'1']+ as n         { INT (Mint.to_string n) }
-  | "0o" ['0'-'7']+ as n         { INT (Mint.to_string n) }
+  | '-'? digit+ as n             { INT (Mint.of_string n) }
+  | "0x" ['0'-'9' 'a'-'f' 'A' - 'F']+ as n   { INT (Mint.of_string n) }
+  | "0b" ['0'-'1']+ as n         { INT (Mint.of_string n) }
+  | "0o" ['0'-'7']+ as n         { INT (Mint.of_string n) }
 
   (** caractères et chaines *)
   | "'" (atom) "'" as a          { CHAR a }
   (** TODO: Vérifier si les guillemets au milieu des chaines de caractères sont bel et bien impossible *)
   | '"' ( atom | '\'' | "\\\"" | [^'"'] )* '"' as s { STRING s }
 
-  (** Ponctuation *)
+  (**caractères et chaines*)
+  | "’" (atom) "’" as a          { CHAR a }
+  | '"' (atom | '\'' | "\"" # '"')* '"' as s     { STRING s}
+
+    (** Ponctuation *)
   | "("             { LPAREN }
   | ")"             { RPAREN }
   | "{"             { LBRACE }
   | "}"             { RBRACE }
-  | "|"             { BAR }
   | "!"             { EXL }
-  | ";"             { SEMI }
-  | ","             { COM }
   | "."             { DOT }
-  | ":"             { TDOT }
+  | "["             { LCROCHET }
+  | "]"             { RCROCHET }
+  | "|"             { BAR }
+  | ","             { COM }
+  | ";"             { SEMI }
+  | ":"             { DOUBLE_POINT }
   | "="             { EQ }
   | "+"             { PLUS }
-  | "->"            { ARROW }
   | "-"             { MINUS }
-  | "*"             { TIMES }
+  | "*"             { STAR }
   | "/"             { DIV }
   | "\\"            { BAKSL }
   | "&&"            { AND }
   | "||"            { OR }
+  | "<"             { INF }
+  | ">"             { SUP }
   | "<=?"           { LEQ }
   | ">=?"           { GEQ }
   | "<?"            { LT }
   | ">?"            { GT }
   | "=?"            { EQEQ }
   | "_"             { UNDER }
+  | "->"            { ARROW }
 
   | eof             { EOF }
 
