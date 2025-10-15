@@ -155,7 +155,7 @@ expr:
 expr_simp:
   (* Loops *)
   | WHILE LPAREN e1=expr RPAREN LBRACE e2=expr RBRACE { While(e1, e2) }
-  | DO LBRACE e1=expr RBRACE LPAREN e2=expr RPAREN { While(e2, e1) }
+  | DO LBRACE e1=expr RBRACE UNTIL LPAREN e2=expr RPAREN { While(e2, e1) }
   | FOR v=located(IDENT) FROM e1=expr TO e2=expr LBRACE e3=expr RBRACE { For(loc_id v, e1, e2, e3) }
   (* Functions *)
   | BAKSL p=located(pattern) ARROW e=expr { Fun(FunctionDefinition(p, e)) }
