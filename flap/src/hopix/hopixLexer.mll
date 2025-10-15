@@ -68,13 +68,10 @@ rule token = parse
   | "0o" ['0'-'7']+ as n         { INT (Mint.of_string n) }
 
   (** caractères et chaines *)
-  | "'" (atom) "'" as a          { CHAR a }
+  | "'" (atom) "'" as a          { CHAR (String.get a 1) }
   (** TODO: Vérifier si les guillemets au milieu des chaines de caractères sont bel et bien impossible *)
   | '"' ( atom | '\'' | "\\\"" | [^'"'] )* '"' as s { STRING s }
 
-  (**caractères et chaines*)
-  | "’" (atom) "’" as a          { CHAR a }
-  | '"' (atom | '\'' | "\"" # '"')* '"' as s     { STRING s}
 
     (** Ponctuation *)
   | "("             { LPAREN }

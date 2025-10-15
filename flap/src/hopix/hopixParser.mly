@@ -45,7 +45,7 @@
 %token LPAREN RPAREN LBRACE RBRACE SEMI EQ PLUS MINUS STAR DIV AND OR LEQ GEQ LT GT EQEQ INF SUP COM DOT BAR BAKSL ARROW DOUBLE_POINT UNDER EXL LCROCHET RCROCHET ESP
 
 %token<string> TYPE_VARIABLE IDENT CONSTR
-%token<string> STRING
+%token<string> STRING 
 %token<int64> INT
 %token<char> CHAR
 
@@ -272,12 +272,24 @@ branch:
 
 (**Pattern*)
 
+
 pattern:
-  | l = separated_nonempty_list(BAR,located(simple_pattern)) { POr(l) }
-  | l = separated_nonempty_list(ESP,located(simple_pattern)) { PAnd(l) }
+  | p = pattern_or { p }
+
+pattern_or:
+  | p1 = located(pattern_and) BAR p2 = located(pattern_or) { POr [p1; p2] }
+  | p = pattern_and { p }
+
+pattern_and:
+  | p1 = located(pattern_base) ESP p2 = located(pattern_and) { PAnd [p1; p2] }
+  | p = pattern_base { p }
+
+pattern_base:
   | LPAREN l=separated_nonempty_list(COM,located(simple_pattern)) RPAREN { PTuple(l) }
-  | p = located(pattern) DOUBLE_POINT t = type_expr { PTypeAnnotation(p,t) }
+  | p = located(pattern_base) DOUBLE_POINT t = type_expr { PTypeAnnotation(p,t) }
   | s = simple_pattern { s }
+
+
 
 simple_pattern :
   | i = located(CONSTR) t = opt_p1 p=separated_list(COM, located(simple_pattern)) { PTaggedValue(loc_kid i, t, p) }
