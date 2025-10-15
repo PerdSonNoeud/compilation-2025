@@ -33,7 +33,12 @@
 %token<int64> INT
 %token<char> CHAR
 
-%left MINUS
+%left OR
+%left AND
+%nonassoc EQEQ LEQ GEQ LT GT
+%left PLUS MINUS
+%left STAR DIV
+
 
 %start<HopixAST.t> program
 %%
@@ -172,6 +177,18 @@ expr_simp:
   | e1=expr e2=expr       { Apply(e1, e2) }
   | REF e=expr            { Ref(e) }
   | EXL e=expr            { Read(e) }
+
+  | b = expr STAR b2 = expr { Apply(b,b2) }
+  | b = expr DIV b2 = expr { Apply(b,b2) }
+  | b = expr PLUS b2 = expr { Apply(b,b2) }
+  | b = expr MINUS b2 = expr { Apply(b,b2) }
+  | b = expr EQEQ b2 = expr { Apply(b,b2) }
+  | b = expr LEQ b2 = expr { Apply(b,b2) }
+  | b = expr GEQ b2 = expr { Apply(b,b2) }
+  | b = expr LT b2 = expr { Apply(b,b2) }
+  | b = expr GT b2 = expr { Apply(b,b2) }
+  | b = expr AND b2 = expr { Apply(b,b2) }
+  | b = expr OR b2 = expr { Apply(b,b2) }
   | e=expr_atom           { e }
 
 expr_atom:
@@ -201,6 +218,7 @@ uplet_rest:
 label:
   | l=located(IDENT) EQ e=expr { (loc_lid l, e) }
 
+(*
 binop:
   | b = binop STAR b2 = binop2 { Apply(b,b2) }
   | b = binop DIV b2 = binop2 { Apply(b,b2) }
@@ -221,6 +239,8 @@ binop3:
   | b = binop3 GT b2 = binop { Apply(b,b2) }
   | b = binop3 AND b2 = binop { Apply(b,b2) }
   | b = binop3 OR b2 = binop { Apply(b,b2) }
+
+*)
 
 branches:
   | BAR b=separated_nonempty_list(BAR, branch) { b }
