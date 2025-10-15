@@ -32,6 +32,4 @@
   (infer true)
   (flags --table))
 
-(env (dev (flags (:standard -warn-error -A -w -9 -w -32-27))))
-
-
+(env (dev (flags (:standard -warn-error -A -w -9 -w -32))))
