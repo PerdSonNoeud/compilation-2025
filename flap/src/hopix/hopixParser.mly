@@ -201,7 +201,6 @@ uplet_rest:
 label:
   | l=located(IDENT) EQ e=expr { (loc_lid l, e) }
 
-(*
 binop:
   | b = binop STAR b2 = binop2 { Apply(b,b2) }
   | b = binop DIV b2 = binop2 { Apply(b,b2) }
