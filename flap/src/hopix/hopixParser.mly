@@ -149,8 +149,8 @@ expr:
   | MATCH LPAREN e=expr RPAREN LBRACE b=branches RBRACE { Case(e, b) }
   | IF LPAREN e1=expr RPAREN THEN LBRACE e2=expr RPAREN el=else_expr { IfThenElse(e1, e2, el) }
   | LPAREN t=uplet_expr RPAREN { Tuple(t) }
-  | LBRACE l=separated_nonempty_list(COM, label) RBRACE { Record(l, None) } (* TODO: Type list option *)
-  | e=expr DOT l=located(IDENT) { Field(e, loc_id l, None) } (* TODO: Type list option *)
+  | LBRACE l=separated_nonempty_list(COM, label) RBRACE t=type_option { Record(l, t) }
+  | e=expr DOT l=located(IDENT) t=type_option { Field(e, loc_id l, t) } 
   | e1=expr SEMI e2=expr { Sequence([e, e]) }
   (* | v=vdef SEMI e=expr { Define(v, e) } *)
   | e1=expr DOUBLE_POINT EQ e2=expr { Assign(e1, e2) }
@@ -164,17 +164,25 @@ expr_simp:
   | e=expr_atom           { e }
 
 expr_atom:
-  | x=located(INT)        { Literal(loc_int x) }
-  | x=located(CHAR)       { Literal(loc_char x) }
-  | x=located(STRING)     { Literal(loc_string x) }
-  | x=located(IDENT)      { Variable(loc_id x, None) } (* TODO: Type list option *)
-  | x=located(CONSTR)     { Tagged(loc_kid x, None, None) } (* TODO: Type list option & Expr list option *)
+  | x=located(INT)                  { Literal(loc_int x) }
+  | x=located(CHAR)                 { Literal(loc_char x) }
+  | x=located(STRING)               { Literal(loc_string x) }
+  | x=located(IDENT) t=type_option  { Variable(loc_id x, t) }
+  | x=located(CONSTR) t=type_option e=expr_option { Tagged(loc_kid x, t, e) }
   | LPAREN RPAREN         { Tuple([]) }
   | LPAREN e=expr RBRACE  { e }
 
 else_expr:
   | ELSE LBRACE e=expr RBRACE { Some e }
   |                           { None }
+
+type_option:
+  | t=type_expr { Some t }
+  |             { None }
+
+expr_option:
+  | e=expr { Some e }
+  |        { None }
 
 uplet_expr:
   | e1=expr COM e2=expr t=uplet_rest { e1 :: e2 :: t }
