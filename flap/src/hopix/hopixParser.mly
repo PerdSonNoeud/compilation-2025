@@ -32,6 +32,8 @@
 %token<string> CHAR STRING
 %token<int64> INT
 
+%left MINUS
+
 %start<HopixAST.t> program
 %%
 
@@ -189,7 +191,25 @@ label:
   | l=located(IDENT) EQ e=expr { (loc_id l, e) }
 
 binop:
-  | PLUS {  }
+  | b = binop STAR b2 = binop2 { Apply(b,b2) }
+  | b = binop DIV b2 = binop2 { Apply(b,b2) }
+  | b = binop2 { b }
+ 
+
+binop2:
+  | b = binop2 PLUS b2 = binop3 { Apply(b,b2) }
+  | b = binop2 MINUS b2 = binop3 { Apply(b,b2) }
+  | b = binop3 { b }
+
+
+binop3:
+  | b = binop3 EQEQ b2 = binop { Apply(b,b2) }
+  | b = binop3 LEQ b2 = binop { Apply(b,b2) }
+  | b = binop3 GEQ b2 = binop { Apply(b,b2) }
+  | b = binop3 LT b2 = binop { Apply(b,b2) }
+  | b = binop3 GT b2 = binop { Apply(b,b2) }
+  | b = binop3 AND b2 = binop { Apply(b,b2) }
+  | b = binop3 OR b2 = binop { Apply(b,b2) }
 
 branches:
   | BAR b=separated_nonempty_list(BAR, branch) { b }
@@ -204,13 +224,12 @@ branch:
 pattern:
   | LPAREN l=separated_nonempty_list(COM,simple_pattern) RPAREN { PTuple(l) }
   | p = pattern DOUBLE_POINT t = type_expr { PTypeAnnotation(p,t) }
-  | l = separated_nonempty_list(BAR,simple_pattern) { POr(l) }
-  | l = separated_nonempty_list(ESP,simple_pattern) { PAnd(l) }
   | s = simple_pattern { s }
 
 simple_pattern :
   | i = located(CONSTR) t = opt_p1 p = separated_list(COM,simple_pattern) { PTaggedValue(loc_kid i, t, p) }
   | LBRACE i=located(IDENT) EQ p = simple_pattern xs = opt_p2 RBRACE t = opt_p1 { PRecord((loc_kid i,p)::xs , t) }
+  | a = atom_pattern { a }
 
 
 atom_pattern :
@@ -219,15 +238,18 @@ atom_pattern :
   | x = INT  { Literal(loc_lint x) }
   | c = CHAR { Literal(loc_lchar c) }
   | s = STRING { Literal(loc_lstring s) }
+  | l = separated_nonempty_list(BAR,pattern) { POr(l) }
+  | l = separated_nonempty_list(ESP,pattern) { PAnd(l) }
 
 
 opt_p1 :
-  | MINUS t = separated_nonempty_list(COM,type_expr) PLUS { SOME t }
+  | INF t = separated_nonempty_list(COM,type_expr) SUP { SOME t }
   | { None }
 
 opt_p2 :
   | COM i=located(IDENT) EQ p = simple_pattern xs = opt_p2{ (loc_kid i,p)::p2 }
   | { }
+
 
 
 
