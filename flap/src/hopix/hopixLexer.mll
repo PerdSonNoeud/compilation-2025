@@ -95,6 +95,7 @@ rule token = parse
   | "*"             { STAR }
   | "/"             { DIV }
   | "\\"            { BAKSL }
+  | "&"             { ESP }
   | "&&"            { AND }
   | "||"            { OR }
   | "<"             { INF }

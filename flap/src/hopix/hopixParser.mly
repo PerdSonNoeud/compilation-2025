@@ -26,12 +26,14 @@
 
 %token EOF
 %token IF THEN ELSE WHILE DO UNTIL FOR FROM TO MATCH WITH FUN LET IN TYPE EXTERN REF
-%token LPAREN RPAREN LBRACE RBRACE SEMI EQ PLUS MINUS STAR DIV AND OR LEQ GEQ LT GT EQEQ INF SUP COM DOT BAR BAKSL ARROW DOUBLE_POINT UNDER EXL LCROCHET RCROCHET
+%token LPAREN RPAREN LBRACE RBRACE SEMI EQ PLUS MINUS STAR DIV AND OR LEQ GEQ LT GT EQEQ INF SUP COM DOT BAR BAKSL ARROW DOUBLE_POINT UNDER EXL LCROCHET RCROCHET ESP
 
 %token<string> TYPE_VARIABLE IDENT CONSTR
 %token<string> STRING
 %token<int64> INT
 %token<char> CHAR
+
+%left MINUS
 
 %start<HopixAST.t> program
 %%
@@ -139,6 +141,12 @@ type_con:
 type_var:
     | i = TYPE_VARIABLE { TId i }
 
+
+type_scheme :
+    | LCROCHET l = liste_variable RCROCHET t= type_expr { ForallTy(l,t) }
+
+(**Expressions*)
+
 expr:
   (* | v=vdef SEMI e=expr { Define(v, e) } *)
   (* | LPAREN e=expr DOUBLE_POINT t=type_ RPAREN { TypeAnnotation(e, t) } *)
@@ -195,8 +203,25 @@ label:
 
 (*
 binop:
-  | PLUS {  }
-*)
+  | b = binop STAR b2 = binop2 { Apply(b,b2) }
+  | b = binop DIV b2 = binop2 { Apply(b,b2) }
+  | b = binop2 { b }
+ 
+
+binop2:
+  | b = binop2 PLUS b2 = binop3 { Apply(b,b2) }
+  | b = binop2 MINUS b2 = binop3 { Apply(b,b2) }
+  | b = binop3 { b }
+
+
+binop3:
+  | b = binop3 EQEQ b2 = binop { Apply(b,b2) }
+  | b = binop3 LEQ b2 = binop { Apply(b,b2) }
+  | b = binop3 GEQ b2 = binop { Apply(b,b2) }
+  | b = binop3 LT b2 = binop { Apply(b,b2) }
+  | b = binop3 GT b2 = binop { Apply(b,b2) }
+  | b = binop3 AND b2 = binop { Apply(b,b2) }
+  | b = binop3 OR b2 = binop { Apply(b,b2) }
 
 branches:
   | BAR b=separated_nonempty_list(BAR, branch) { b }
@@ -207,12 +232,43 @@ branch:
       Position.with_poss $startpos $endpos (Branch(p, e))
     }
 
+
+(**Pattern*)
+
 pattern:
+  | LPAREN l=separated_nonempty_list(COM,simple_pattern) RPAREN { PTuple(l) }
+  | p = pattern DOUBLE_POINT t = type_expr { PTypeAnnotation(p,t) }
+  | s = simple_pattern { s }
+
+simple_pattern :
+  | i = located(CONSTR) t = opt_p1 p = separated_list(COM,simple_pattern) { PTaggedValue(loc_kid i, t, p) }
+  | LBRACE i=located(IDENT) EQ p = simple_pattern xs = opt_p2 RBRACE t = opt_p1 { PRecord((loc_kid i,p)::xs , t) }
+  | a = atom_pattern { a }
+
+
+atom_pattern :
   | v=located(IDENT) { PVariable(loc_id v) }
   | UNDER { PWildcard }
+  | x = INT  { Literal(loc_lint x) }
+  | c = CHAR { Literal(loc_lchar c) }
+  | s = STRING { Literal(loc_lstring s) }
+  | l = separated_nonempty_list(BAR,pattern) { POr(l) }
+  | l = separated_nonempty_list(ESP,pattern) { PAnd(l) }
 
-type_scheme :
-    | LCROCHET l = liste_variable RCROCHET t= type_expr { ForallTy(l,t) }
+
+opt_p1 :
+  | INF t = separated_nonempty_list(COM,type_expr) SUP { SOME t }
+  | { None }
+
+opt_p2 :
+  | COM i=located(IDENT) EQ p = simple_pattern xs = opt_p2{ (loc_kid i,p)::p2 }
+  | { }
+
+
+
+
+
+
 
 %inline located(X): x=X {
   Position.with_poss $startpos $endpos x
