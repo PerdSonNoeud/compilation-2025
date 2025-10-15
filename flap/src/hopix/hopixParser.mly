@@ -26,7 +26,7 @@
 
 %token EOF
 %token IF THEN ELSE WHILE DO UNTIL FOR FROM TO MATCH WITH FUN LET IN TYPE EXTERN REF
-%token LPAREN RPAREN LBRACE RBRACE SEMI EQ PLUS MINUS STAR DIV AND OR LEQ GEQ LT GT EQEQ INF SUP COM DOT BAR BAKSL ARROW DOUBLE_POINT UNDER EXL LCROCHET RCROCHET
+%token LPAREN RPAREN LBRACE RBRACE SEMI EQ PLUS MINUS STAR DIV AND OR LEQ GEQ LT GT EQEQ INF SUP COM DOT BAR BAKSL ARROW DOUBLE_POINT UNDER EXL LCROCHET RCROCHET ESP
 
 %token<string> TYPE_VARIABLE IDENT CONSTR
 %token<string> CHAR STRING
@@ -136,6 +136,12 @@ type_con:
 type_var:
     | i = TYPE_VARIABLE { TId i }
 
+
+type_scheme :
+    | LCROCHET l = liste_variable RCROCHET t= type_expr { ForallTy(l,t) }
+
+(**Expressions*)
+
 expr:
   (* Loops *)
   | WHILE LPAREN e1=expr RPAREN LBRACE e2=expr RBRACE { While(e1, e2) }
@@ -192,12 +198,41 @@ branches:
 branch:
   | pattern ARROW e=expr { Branch(p, e) }
 
+
+(**Pattern*)
+
 pattern:
+  | LPAREN l=separated_nonempty_list(COM,simple_pattern) RPAREN { PTuple(l) }
+  | p = pattern DOUBLE_POINT t = type_expr { PTypeAnnotation(p,t) }
+  | l = separated_nonempty_list(BAR,simple_pattern) { POr(l) }
+  | l = separated_nonempty_list(ESP,simple_pattern) { PAnd(l) }
+  | s = simple_pattern { s }
+
+simple_pattern :
+  | i = located(CONSTR) t = opt_p1 p = separated_list(COM,simple_pattern) { PTaggedValue(loc_kid i, t, p) }
+  | LBRACE i=located(IDENT) EQ p = simple_pattern xs = opt_p2 RBRACE t = opt_p1 { PRecord((loc_kid i,p)::xs , t) }
+
+
+atom_pattern :
   | v=located(IDENT) { PVariable(loc_id v) }
   | UNDER { PWildcard }
+  | x = INT  { Literal(loc_lint x) }
+  | c = CHAR { Literal(loc_lchar c) }
+  | s = STRING { Literal(loc_lstring s) }
 
-type_scheme :
-    | LCROCHET l = liste_variable RCROCHET t= type_expr { ForallTy(l,t) }
+
+opt_p1 :
+  | MINUS t = separated_nonempty_list(COM,type_expr) PLUS { SOME t }
+  | { None }
+
+opt_p2 :
+  | COM i=located(IDENT) EQ p = simple_pattern xs = opt_p2{ (loc_kid i,p)::p2 }
+  | { }
+
+
+
+
+
 
 %inline located(X): x=X {
   Position.with_poss $startpos $endpos x
