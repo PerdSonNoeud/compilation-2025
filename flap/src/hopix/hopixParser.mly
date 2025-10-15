@@ -18,10 +18,26 @@
   let loc_tyVar x = map_loc (fun s -> TyVar s) x
   let loc_lid x = map_loc (fun s -> LId s) x
 
-  let loc_tyTuple x = map_loc (fun s -> TyTuple s) x
+  let loc_tyTuple x = map_loc (fun s -> TyTuple s) x 
+  let loc_tuple x = map_loc (fun s -> Tuple s) x 
+  let loc_read x = map_loc (fun s -> Read s) x
+  let loc_ref x = map_loc (fun s -> Ref s) x
+  let loc_literal x = map_loc (fun s -> Literal s) x
+
+  let loc_for v e1 e2 e3 = map_loc (fun s -> For(v,e1,e2,e3)) v 
+  let loc_tagged x t e = map_loc (fun s -> Tagged(x,t,e)) x
 
   let loc_tyArrow x y = map_loc2 (fun s z-> TyArrow(s,z)) x y
+  let loc_assign x y = map_loc2 (fun s z-> Assign(x, y)) x y
   let loc_tyCon x y = map_loc2 (fun s z-> TyCon(s,z)) x y
+  let loc_record x y = map_loc2 (fun s z-> Record(s,z)) x y 
+  let loc_while x y = map_loc2 (fun s z-> While(s,z)) x y 
+  let loc_case x y = map_loc2 (fun s z-> Case(s,z)) x y 
+  let loc_variable x y = map_loc (fun s -> Variable (s, y)) x
+  let loc_apply x y = map_loc2 (fun s z-> Apply(s,z)) x y 
+
+
+
 %}
 
 %token EOF
@@ -29,11 +45,16 @@
 %token LPAREN RPAREN LBRACE RBRACE SEMI EQ PLUS MINUS STAR DIV AND OR LEQ GEQ LT GT EQEQ INF SUP COM DOT BAR BAKSL ARROW DOUBLE_POINT UNDER EXL LCROCHET RCROCHET ESP
 
 %token<string> TYPE_VARIABLE IDENT CONSTR
-%token<string> STRING
+%token<string> STRING 
 %token<int64> INT
 %token<char> CHAR
 
-%left MINUS
+%left OR
+%left AND
+%nonassoc EQEQ LEQ GEQ LT GT
+%left PLUS MINUS
+%left STAR DIV
+
 
 %start<HopixAST.t> program
 %%
@@ -150,38 +171,77 @@ type_scheme :
 expr:
   (* | v=vdef SEMI e=expr { Define(v, e) } *)
   (* | LPAREN e=expr DOUBLE_POINT t=type_ RPAREN { TypeAnnotation(e, t) } *)
-  | e=located(expr_simp)  { e }
+  | e=located(expr_seq)  { e }
 
-expr_simp:
-  (* Loops *)
-  | WHILE LPAREN e1=expr RPAREN LBRACE e2=expr RBRACE { While(e1, e2) }
-  | DO LBRACE e1=expr RBRACE UNTIL LPAREN e2=expr RPAREN { While(e2, e1) }
-  | FOR v=located(IDENT) FROM e1=expr TO e2=expr LBRACE e3=expr RBRACE { For(loc_id v, e1, e2, e3) }
-  (* Functions *)
-  | BAKSL p=located(pattern) ARROW e=expr { Fun(FunctionDefinition(p, e)) }
-  (* Binary operations *)
-  (* | b=binop { b } *)
-  (* Others *)
-  | MATCH LPAREN e=expr RPAREN LBRACE b=branches RBRACE { Case(e, b) }
-  | ite=if_then_else { ite }
-  | LPAREN t=uplet_expr RPAREN { Tuple(t) }
-  | LBRACE l=separated_nonempty_list(COM, label) RBRACE t=type_option { Record(l, t) }
-  | e1=expr e2=separated_nonempty_list(SEMI, expr) { Sequence(e1::e2) }
-  | e=expr DOT l=located(IDENT) t=type_option { Field(e, loc_lid l, t) } 
-  | e1=expr DOUBLE_POINT EQ e2=expr { Assign(e1, e2) }
-  | e1=expr e2=expr       { Apply(e1, e2) }
-  | REF e=expr            { Ref(e) }
-  | EXL e=expr            { Read(e) }
-  | e=expr_atom           { e }
+expr_seq :
+  | e = expr_assign { Position.value e }
+  | e1=expr_assign e2=separated_nonempty_list(SEMI, located(expr_seq)) { Sequence(e1::e2) }
+
+expr_assign :
+  | e = located(expr_lambda) { e }
+  | e1=located(expr_lambda) DOUBLE_POINT EQ e2=expr_assign { loc_assign e1 e2 }
+
+expr_lambda :
+  | e = expr_or { e }
+  | BAKSL p=located(pattern) ARROW e=located(expr_or) { Fun(FunctionDefinition(p, e)) }
+
+expr_or :
+  | e = expr_and { Position.value e }
+  | b = located(expr_or) OR b2 = expr_and { Apply(b,b2) }
+
+expr_and :
+  | e = located(expr_eq) { e }
+  | b = located(expr_and) AND b2 = located(located(expr_eq)) { loc_apply b b2 }
+
+expr_eq :
+  | e = expr_rel { e }
+  | b = located(expr_eq) EQEQ b2 = located(expr_rel) { Apply(b,b2) }
+
+expr_rel :
+  | e = expr_add { Position.value e }
+  | b = located(expr_rel) LEQ b2 = expr_add { Apply(b,b2) }
+  | b = located(expr_rel) GEQ b2 = expr_add { Apply(b,b2) }
+  | b = located(expr_rel) LT b2 = expr_add { Apply(b,b2) }
+  | b = located(expr_rel) GT b2 = expr_add { Apply(b,b2) }
+
+expr_add :
+  | e = located(expr_mul) { e }
+  | b = located(expr_add) PLUS b2 = located(located(expr_mul)) { loc_apply b b2 }
+  | b = located(expr_add) MINUS b2 = located(located(expr_mul)) { loc_apply b b2 }
+
+expr_mul :
+  | e = expr_app { Position.value e }
+  | b = located(expr_mul) STAR b2 = expr_app { Apply(b,b2) }
+  | b = located(expr_mul) DIV b2 = expr_app { Apply(b,b2) }
+
+expr_app :
+  | e = located(expr_postfix) { e }
+  | e1=expr_app e2=located(expr_postfix)       { loc_assign e1 e2 }
+
+expr_postfix :
+  | e = expr_atom { Position.value e }
+  | e=located(expr_postfix) DOT l=located(IDENT) t=type_option { Field(e, loc_lid l, t) } 
 
 expr_atom:
-  | x=located(INT)                  { Literal(loc_int x) }
-  | x=located(CHAR)                 { Literal(loc_char x) }
-  | x=located(STRING)               { Literal(loc_string x) }
-  | x=located(IDENT) t=type_option  { Variable(loc_id x, t) }
-  | x=located(CONSTR) t=type_option e=separated_nonempty_list(COM, expr) { Tagged(loc_kid x, t, e) }
-  | LPAREN RPAREN                   { Tuple([]) }
-  | LPAREN e=expr RPAREN            { Position.value e }
+  | x=located(INT)                  { Position.with_poss $startpos $endpos (Literal(loc_int x)) }
+  | x=located(CHAR)                 { Position.with_poss $startpos $endpos (Literal(loc_char x)) }
+  | x=located(STRING)               { Position.with_poss $startpos $endpos (Literal(loc_string x)) }
+  | x=located(IDENT) t=type_option  { Position.with_poss $startpos $endpos (Variable((loc_id x), t)) }
+  | x=located(CONSTR) t=type_option e=separated_nonempty_list(COM, expr) { loc_tagged (loc_kid x) t e }
+  | LPAREN RPAREN                   { loc_tuple (Position.unknown_pos []) }
+  | LPAREN e=located(expr) RPAREN            { Position.value e }
+  | MATCH LPAREN e=located(expr) RPAREN LBRACE b=branches RBRACE { loc_case e b }
+  | ite=located(if_then_else) { ite }
+  | WHILE LPAREN e1=located(expr) RPAREN LBRACE e2=located(expr) RBRACE { loc_while e1 e2 }
+  | DO LBRACE e1=located(expr) RBRACE LPAREN e2=located(expr) RPAREN { loc_while e1 e2}
+  | FOR v=located(IDENT) FROM e1=expr TO e2=expr LBRACE e3=expr RBRACE { loc_for (loc_id v) e1 e2 e3 }
+  | REF e=located(expr)            { loc_ref e }
+  | EXL e=located(expr)            { loc_read e }
+  | LPAREN t=located(uplet_expr) RPAREN { loc_tuple t}
+  | LBRACE l=located(separated_nonempty_list(COM, label)) RBRACE t=located(type_option) {loc_record l t }
+
+
+
 
 if_then_else:
   | IF LPAREN e1=expr RPAREN THEN LBRACE e2=expr RPAREN { IfThenElse(e1, e2, e2) }
@@ -201,44 +261,35 @@ uplet_rest:
 label:
   | l=located(IDENT) EQ e=expr { (loc_lid l, e) }
 
-binop:
-  | b = binop STAR b2 = binop2 { Apply(b,b2) }
-  | b = binop DIV b2 = binop2 { Apply(b,b2) }
-  | b = binop2 { b }
- 
-
-binop2:
-  | b = binop2 PLUS b2 = binop3 { Apply(b,b2) }
-  | b = binop2 MINUS b2 = binop3 { Apply(b,b2) }
-  | b = binop3 { b }
-
-
-binop3:
-  | b = binop3 EQEQ b2 = binop { Apply(b,b2) }
-  | b = binop3 LEQ b2 = binop { Apply(b,b2) }
-  | b = binop3 GEQ b2 = binop { Apply(b,b2) }
-  | b = binop3 LT b2 = binop { Apply(b,b2) }
-  | b = binop3 GT b2 = binop { Apply(b,b2) }
-  | b = binop3 AND b2 = binop { Apply(b,b2) }
-  | b = binop3 OR b2 = binop { Apply(b,b2) }
-
 branches:
-  | BAR b=separated_nonempty_list(BAR, branch) { b }
-  | b=separated_nonempty_list(BAR, branch) { b }
+  | BAR b=located(separated_nonempty_list(BAR, located(branch))) { b }
+  | b=located(separated_nonempty_list(BAR, located(branch))) { b }
 
 branch:
   | p=located(pattern) ARROW e=expr {
-      Position.with_poss $startpos $endpos (Branch(p, e))
+      Branch(p, e)
     }
 
 (**Pattern*)
 
+
 pattern:
-  | l = separated_nonempty_list(BAR,located(simple_pattern)) { POr(l) }
-  | l = separated_nonempty_list(ESP,located(simple_pattern)) { PAnd(l) }
+  | p = pattern_or { p }
+
+pattern_or:
+  | p1 = located(pattern_and) BAR p2 = located(pattern_or) { POr [p1; p2] }
+  | p = pattern_and { p }
+
+pattern_and:
+  | p1 = located(pattern_base) ESP p2 = located(pattern_and) { PAnd [p1; p2] }
+  | p = pattern_base { p }
+
+pattern_base:
   | LPAREN l=separated_nonempty_list(COM,located(simple_pattern)) RPAREN { PTuple(l) }
-  | p = located(pattern) DOUBLE_POINT t = type_expr { PTypeAnnotation(p,t) }
+  | p = located(pattern_base) DOUBLE_POINT t = type_expr { PTypeAnnotation(p,t) }
   | s = simple_pattern { s }
+
+
 
 simple_pattern :
   | i = located(CONSTR) t = opt_p1 p=separated_list(COM, located(simple_pattern)) { PTaggedValue(loc_kid i, t, p) }
