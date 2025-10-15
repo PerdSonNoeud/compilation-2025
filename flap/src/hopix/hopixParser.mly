@@ -52,45 +52,6 @@ definition:
 
     (*| v=vdefinition         { DefineValue(v) }*)
 
-expr:
-  (* Loops *)
-  | WHILE LPAREN e1=expr RPAREN LBRACE e2=expr RBRACE { While(e1, e2) }
-  | DO LBRACE e1=expr RBRACE LPAREN e2=expr RPAREN { e2, e1 }
-  | FOR v=located(IDENT) FROM e1=expr TO e2=expr LBRACE e3=expr RBRACE { For(loc_id v, e1, e2, e3) }
-  (* Functions *)
-  | BAKSL p=pattern ARROW e=expr { Fun(FunctionDefinition(p, e)) }
-  (* Binary operations *)
-  | e1=expr b=binop e2=expr { Apply(Apply(Variable(b, None), e1), e2) }
-  (* Others *)
-  | MATCH LPAREN e=expr RPAREN LBRACE b=branches RBRACE { Case(e, b) }
-  | IF LPAREN e1=expr RPAREN THEN LBRACE e2=expr RPAREN { IfThenElse(e1, e2) } (* TODO: Else *)
-  | LPAREN t=uplet_expr RPAREN { Tuple(t) }
-  | LBRACE l=separated_nonempty_list(COM, label) RBRACE { Record(l, None) } (* TODO: Type list option *)
-  | e=expr DOT l=located(IDENT) { Field(e, loc_id l, None) } (* TODO: Type list option *)
-  | e1=expr SEMI e2=expr { Sequence([e, e]) }
-  (* | v=vdef SEMI e=expr { Define(v, e) } *)
-  | e1=expr DOUBLE_POINT EQ e2=expr { Assign(e1, e2) }
-  (* | LPAREN e=expr DOUBLE_POINT t=type_ RPAREN { TypeAnnotation(e, t) } *)
-  | e=expr_simp           { e }
-
-expr_simp:
-  | e1=expr_atom e2=expr  { Apply(e1, e2) }
-  | REF e=expr            { Ref(e) }
-  | EXL e=expr            { Read(e) }
-  | e=expr_atom           { e }
-
-expr_atom:
-  | x=located(INT)        { Literal(loc_int x) }
-  | x=located(CHAR)       { Literal(loc_char x) }
-  | x=located(STRING)     { Literal(loc_string x) }
-  | x=located(IDENT)      { Variable(loc_id x, None) } (* TODO: Type list option *)
-  | x=located(CONSTR)     { Tagged(loc_kid x, None, None) } (* TODO: Type list option & Expr list option *)
-  | LPAREN RPAREN         { Tuple([]) }
-  | LPAREN e=expr RBRACE  { e }
-
-uplet_expr:
-  | e1=expr COM e2=expr t=uplet_rest { e1 :: e2 :: t }
-
 tdefinition :
     | bar_opt i = located(CONSTR) l = option_type_list xs = liste_constr { DefineSumType((loc_kid i, l)::xs) }
     | LBRACE i = located(IDENT) DOUBLE_POINT t = type_expr l = liste_label RBRACE { DefineRecordType((loc_lid i ,t)::l) }
@@ -174,6 +135,45 @@ type_con:
 
 type_var:
     | i = TYPE_VARIABLE { TId i }
+
+expr:
+  (* Loops *)
+  | WHILE LPAREN e1=expr RPAREN LBRACE e2=expr RBRACE { While(e1, e2) }
+  | DO LBRACE e1=expr RBRACE LPAREN e2=expr RPAREN { e2, e1 }
+  | FOR v=located(IDENT) FROM e1=expr TO e2=expr LBRACE e3=expr RBRACE { For(loc_id v, e1, e2, e3) }
+  (* Functions *)
+  | BAKSL p=pattern ARROW e=expr { Fun(FunctionDefinition(p, e)) }
+  (* Binary operations *)
+  | e1=expr b=binop e2=expr { Apply(Apply(Variable(b, None), e1), e2) }
+  (* Others *)
+  | MATCH LPAREN e=expr RPAREN LBRACE b=branches RBRACE { Case(e, b) }
+  | IF LPAREN e1=expr RPAREN THEN LBRACE e2=expr RPAREN { IfThenElse(e1, e2) } (* TODO: Else *)
+  | LPAREN t=uplet_expr RPAREN { Tuple(t) }
+  | LBRACE l=separated_nonempty_list(COM, label) RBRACE { Record(l, None) } (* TODO: Type list option *)
+  | e=expr DOT l=located(IDENT) { Field(e, loc_id l, None) } (* TODO: Type list option *)
+  | e1=expr SEMI e2=expr { Sequence([e, e]) }
+  (* | v=vdef SEMI e=expr { Define(v, e) } *)
+  | e1=expr DOUBLE_POINT EQ e2=expr { Assign(e1, e2) }
+  (* | LPAREN e=expr DOUBLE_POINT t=type_ RPAREN { TypeAnnotation(e, t) } *)
+  | e=expr_simp           { e }
+
+expr_simp:
+  | e1=expr_atom e2=expr  { Apply(e1, e2) }
+  | REF e=expr            { Ref(e) }
+  | EXL e=expr            { Read(e) }
+  | e=expr_atom           { e }
+
+expr_atom:
+  | x=located(INT)        { Literal(loc_int x) }
+  | x=located(CHAR)       { Literal(loc_char x) }
+  | x=located(STRING)     { Literal(loc_string x) }
+  | x=located(IDENT)      { Variable(loc_id x, None) } (* TODO: Type list option *)
+  | x=located(CONSTR)     { Tagged(loc_kid x, None, None) } (* TODO: Type list option & Expr list option *)
+  | LPAREN RPAREN         { Tuple([]) }
+  | LPAREN e=expr RBRACE  { e }
+
+uplet_expr:
+  | e1=expr COM e2=expr t=uplet_rest { e1 :: e2 :: t }
 
 uplet_rest:
   | COM e=expr t=uplet_rest { e :: t }
