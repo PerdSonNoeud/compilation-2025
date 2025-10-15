@@ -160,7 +160,7 @@ expr_simp:
   (* Functions *)
   | BAKSL p=located(pattern) ARROW e=expr { Fun(FunctionDefinition(p, e)) }
   (* Binary operations *)
-  (* | e1=expr b=binop e2=expr { Apply(Apply(Variable(b, None), e1), e2) } *)
+  (* | b=binop { b } *)
   (* Others *)
   | MATCH LPAREN e=expr RPAREN LBRACE b=branches RBRACE { Case(e, b) }
   | ite=if_then_else { ite }
@@ -183,7 +183,7 @@ expr_atom:
   | LPAREN RPAREN                   { Tuple([]) }
   | LPAREN e=expr RPAREN            { Position.value e }
 
-  if_then_else:
+if_then_else:
   | IF LPAREN e1=expr RPAREN THEN LBRACE e2=expr RPAREN { IfThenElse(e1, e2, e2) }
   | IF LPAREN e1=expr RPAREN THEN LBRACE e2=expr RPAREN ELSE LBRACE e3=expr RBRACE { IfThenElse(e1, e2, e3) }
 
@@ -231,43 +231,34 @@ branch:
       Position.with_poss $startpos $endpos (Branch(p, e))
     }
 
-
 (**Pattern*)
 
 pattern:
-  | LPAREN l=separated_nonempty_list(COM,simple_pattern) RPAREN { PTuple(l) }
-  | p = pattern DOUBLE_POINT t = type_expr { PTypeAnnotation(p,t) }
+  | l = separated_nonempty_list(BAR,located(simple_pattern)) { POr(l) }
+  | l = separated_nonempty_list(ESP,located(simple_pattern)) { PAnd(l) }
+  | LPAREN l=separated_nonempty_list(COM,located(simple_pattern)) RPAREN { PTuple(l) }
+  | p = located(pattern) DOUBLE_POINT t = type_expr { PTypeAnnotation(p,t) }
   | s = simple_pattern { s }
 
 simple_pattern :
-  | i = located(CONSTR) t = opt_p1 p = separated_list(COM,simple_pattern) { PTaggedValue(loc_kid i, t, p) }
-  | LBRACE i=located(IDENT) EQ p = simple_pattern xs = opt_p2 RBRACE t = opt_p1 { PRecord((loc_kid i,p)::xs , t) }
+  | i = located(CONSTR) t = opt_p1 p=separated_list(COM, located(simple_pattern)) { PTaggedValue(loc_kid i, t, p) }
+  | LBRACE i=located(IDENT) EQ p = located(simple_pattern) xs = opt_p2 RBRACE t = opt_p1 { PRecord((loc_lid i,p)::xs , t) }
   | a = atom_pattern { a }
-
 
 atom_pattern :
   | v=located(IDENT) { PVariable(loc_id v) }
   | UNDER { PWildcard }
-  | x = INT  { Literal(loc_lint x) }
-  | c = CHAR { Literal(loc_lchar c) }
-  | s = STRING { Literal(loc_lstring s) }
-  | l = separated_nonempty_list(BAR,pattern) { POr(l) }
-  | l = separated_nonempty_list(ESP,pattern) { PAnd(l) }
-
+  | x = located(INT)  { PLiteral(loc_int x) }
+  | c = located(CHAR) { PLiteral(loc_char c) }
+  | s = located(STRING) { PLiteral(loc_string s) }
 
 opt_p1 :
-  | INF t = separated_nonempty_list(COM,type_expr) SUP { SOME t }
+  | INF t = separated_nonempty_list(COM,type_expr) SUP { Some t }
   | { None }
 
 opt_p2 :
-  | COM i=located(IDENT) EQ p = simple_pattern xs = opt_p2{ (loc_kid i,p)::p2 }
-  | { }
-
-
-
-
-
-
+  | COM i=located(IDENT) EQ p = located(simple_pattern) xs = opt_p2{ (loc_lid i,p)::xs }
+  | { [] }
 
 %inline located(X): x=X {
   Position.with_poss $startpos $endpos x
