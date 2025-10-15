@@ -3,11 +3,7 @@
   open Error
   open Position
   open HopixParser
-<<<<<<< HEAD
   open Mint
-=======
-open Mint
->>>>>>> Jalon_1
 
   let next_line_and f lexbuf  =
     Lexing.new_line lexbuf;

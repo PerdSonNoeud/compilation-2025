@@ -1,19 +1,15 @@
 %{ (* -*- tuareg -*- *)
   open HopixAST
   open Position
-<<<<<<< HEAD
-%}
 
-%token EOF
-%token IF THEN ELSE WHILE DO UNTIL FOR FROM TO MATCH WITH FUN LET IN TYPE EXTERN REF
-%token LPAREN RPAREN LBRACE RBRACE SEMI EQ PLUS MINUS TIMES DIV AND OR LEQ GEQ LT GT EQEQ COM DOT BAR BAKSL ARROW TDOT UNDER EXL
-=======
-  
   let map_loc f x = Position.map f x
-
   
   let map_loc2 f x1 x2 = Position.join_located x1 x2 f
   let loc_list f xs = Position.join_located_list xs f
+
+  let loc_int x = map_loc (fun s -> LInt s) x
+  let loc_string x = map_loc (fun s -> LString s) x
+  let loc_char x = map_loc (fun s -> LChar s) x
 
   let loc_id x = map_loc (fun s -> Id s) x
   let loc_tcon x = map_loc (fun s -> TCon s) x
@@ -22,20 +18,15 @@
   let loc_tyVar x = map_loc (fun s -> TyVar s) x
   let loc_lid x = map_loc (fun s -> LId s) x
 
-  let loc_tyTuple x = map_loc (fun s -> TyTuple s) x 
+  let loc_tyTuple x = map_loc (fun s -> TyTuple s) x
 
   let loc_tyArrow x y = map_loc2 (fun s z-> TyArrow(s,z)) x y
   let loc_tyCon x y = map_loc2 (fun s z-> TyCon(s,z)) x y
-
-
 %}
 
 %token EOF
-
-%token IF THEN ELSE WHILE DO UNTIL FOR TO MATCH WITH FUN LET IN TYPE EXTERN REF 
-
-%token LPAREN RPAREN LBRACE RBRACE SEMI EQ PLUS MINUS STAR DIV AND OR LEQ GEQ LT GT EQEQ INF SUP COM DOUBLE_POINT ARROW BAR LCROCHET RCROCHET
->>>>>>> Jalon_1
+%token IF THEN ELSE WHILE DO UNTIL FOR FROM TO MATCH WITH FUN LET IN TYPE EXTERN REF
+%token LPAREN RPAREN LBRACE RBRACE SEMI EQ PLUS MINUS STAR DIV AND OR LEQ GEQ LT GT EQEQ INF SUP COM DOT BAR BAKSL ARROW DOUBLE_POINT UNDER EXL LCROCHET RCROCHET
 
 %token<string> TYPE_VARIABLE IDENT CONSTR
 %token<string> CHAR STRING
@@ -49,47 +40,56 @@ program:
     | EOF       { [] }
 
 (**définitions*)
-
-definition: 
-    | TYPE i=located(IDENT) INF t = liste_variable SUP a= opt_def { 
+definition:
+    | TYPE i=located(IDENT) INF t = liste_variable SUP a= opt_def {
         (DefineType(loc_tcon i , t, a))}
 
-    | TYPE i=located(IDENT) a=  opt_def { 
+    | TYPE i=located(IDENT) a=  opt_def {
         (DefineType(loc_tcon i , [], a))}
 
-    | EXTERN v=located(IDENT) DOUBLE_POINT t = located(type_scheme) { 
+    | EXTERN v=located(IDENT) DOUBLE_POINT t = located(type_scheme) {
         (DeclareExtern(loc_id v ,t)) }
 
     (*| v=vdefinition         { DefineValue(v) }*)
 
 expr:
-  | x=INT         { Literal(LInt(x)) }
-  | x=CHAR        { Literal(LChar(x)) }
-  | x=STRING      { Literal(LString(x)) }
-  | x=IDENT       { Variable(x, []) } (* TODO: Type list option *)
-  | x=CONSTR      {  } (* TODO: Construction d'une donnée *)
-  | LPAREN RPAREN { Tuple([]) }
-  | LPAREN t=uplet_expr RPAREN { Tuple(t) }
-  | LBRACE l=separated_nonempty_list(COM, label) RBRACE { Record(l, []) } (* TODO: Type list option *)
-  | e=expr DOT l=IDENT { Field(e, l, []) } (* TODO: Type list option *)
-  | e1=expr SEMI e2=expr { Sequence([e, e]) }
-  (* | v=vdef SEMI e=expr { Define(v, e) } *)
-  | BAKSL p=pattern ARROW e=expr { Fun(FunctionDefinition(p, e)) }
-  | e1=expr e2=expr { Apply(e1, e2) }
-  | e1=expr b=binop e2=expr { Apply(Apply(Variable(b, None), e1), e2) }
-  | MATCH LPAREN e=expr RPAREN LBRACE b=branches RBRACE { Case(e, b) }
-  | IF LPAREN e1=expr RPAREN THEN LBRACE e2=expr RPAREN { IfThenElse(e1, e2) } (* TODO: Else *)
-  | REF e=expr    { Ref(e) }
-  | e1=expr TDOT EQ e2=expr { Assign(e1, e2) }
-  | EXL e=expr    { Read(e) }
+  (* Loops *)
   | WHILE LPAREN e1=expr RPAREN LBRACE e2=expr RBRACE { While(e1, e2) }
   | DO LBRACE e1=expr RBRACE LPAREN e2=expr RPAREN { e2, e1 }
-  | FOR v=IDENT FROM e1=expr TO e2=expr LBRACE e3=expr RBRACE { For(v, e1, e2, e3) }
-  | LPAREN e=expr RBRACE { e }
-  (* | LPAREN e=expr TDOT t=type_ RPAREN { TypeAnnotation(e, t) } *)
+  | FOR v=located(IDENT) FROM e1=expr TO e2=expr LBRACE e3=expr RBRACE { For(loc_id v, e1, e2, e3) }
+  (* Functions *)
+  | BAKSL p=pattern ARROW e=expr { Fun(FunctionDefinition(p, e)) }
+  (* Binary operations *)
+  | e1=expr b=binop e2=expr { Apply(Apply(Variable(b, None), e1), e2) }
+  (* Others *)
+  | MATCH LPAREN e=expr RPAREN LBRACE b=branches RBRACE { Case(e, b) }
+  | IF LPAREN e1=expr RPAREN THEN LBRACE e2=expr RPAREN { IfThenElse(e1, e2) } (* TODO: Else *)
+  | LPAREN t=uplet_expr RPAREN { Tuple(t) }
+  | LBRACE l=separated_nonempty_list(COM, label) RBRACE { Record(l, None) } (* TODO: Type list option *)
+  | e=expr DOT l=located(IDENT) { Field(e, loc_id l, None) } (* TODO: Type list option *)
+  | e1=expr SEMI e2=expr { Sequence([e, e]) }
+  (* | v=vdef SEMI e=expr { Define(v, e) } *)
+  | e1=expr DOUBLE_POINT EQ e2=expr { Assign(e1, e2) }
+  (* | LPAREN e=expr DOUBLE_POINT t=type_ RPAREN { TypeAnnotation(e, t) } *)
+  | e=expr_simp           { e }
+
+expr_simp:
+  | e1=expr_atom e2=expr  { Apply(e1, e2) }
+  | REF e=expr            { Ref(e) }
+  | EXL e=expr            { Read(e) }
+  | e=expr_atom           { e }
+
+expr_atom:
+  | x=located(INT)        { Literal(loc_int x) }
+  | x=located(CHAR)       { Literal(loc_char x) }
+  | x=located(STRING)     { Literal(loc_string x) }
+  | x=located(IDENT)      { Variable(loc_id x, None) } (* TODO: Type list option *)
+  | x=located(CONSTR)     { Tagged(loc_kid x, None, None) } (* TODO: Type list option & Expr list option *)
+  | LPAREN RPAREN         { Tuple([]) }
+  | LPAREN e=expr RBRACE  { e }
 
 uplet_expr:
-  | e1=expr COM e2=expr t=uplet_rest { e1 :: e2 :: rest }
+  | e1=expr COM e2=expr t=uplet_rest { e1 :: e2 :: t }
 
 tdefinition :
     | bar_opt i = located(CONSTR) l = option_type_list xs = liste_constr { DefineSumType((loc_kid i, l)::xs) }
@@ -107,7 +107,7 @@ vdefinition :
 *)
 
 opt_def:
-    | EQ a=  tdefinition {a}
+    | EQ a=tdefinition {a}
     | { Abstract }
 
 
@@ -176,11 +176,11 @@ type_var:
     | i = TYPE_VARIABLE { TId i }
 
 uplet_rest:
-  | COM e=expr t=uplet_rest { e :: rest }
+  | COM e=expr t=uplet_rest { e :: t }
   |  { [] }
 
 label:
-  | label=IDENT EQ e=expr { (LId(label), e) }
+  | l=located(IDENT) EQ e=expr { (loc_id l, e) }
 
 binop:
   | PLUS {  }
@@ -193,12 +193,11 @@ branch:
   | pattern ARROW e=expr { Branch(p, e) }
 
 pattern:
-  | v=IDENT { PVariable(v) }
+  | v=located(IDENT) { PVariable(loc_id v) }
   | UNDER { PWildcard }
 
-type_scheme : 
+type_scheme :
     | LCROCHET l = liste_variable RCROCHET t= type_expr { ForallTy(l,t) }
-
 
 %inline located(X): x=X {
   Position.with_poss $startpos $endpos x
