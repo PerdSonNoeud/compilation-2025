@@ -193,13 +193,13 @@ expr_simp:
   | e=expr_atom                     { e }
 
 expr_atom:
-  | x=located(CONSTR) t=type_option e=separated_list(COM, located(expr)) { Tagged(loc_kid x, t, e) }
-  | LPAREN e=located(expr) DOUBLE_POINT t=type_expr RPAREN { TypeAnnotation(e, t) }
+  | x=located(CONSTR) t=type_option e=expr_option { Tagged(loc_kid x, t, e) }
   | x=located(IDENT) t=type_option  { Variable(loc_id x, t) }
   | x=located(STRING)               { Literal(loc_string x) }
   | x=located(CHAR)                 { Literal(loc_char x) }
   | x=located(INT)                  { Literal(loc_int x) }
   | LPAREN RPAREN                   { Tuple([]) }
+  | LPAREN e=located(expr) DOUBLE_POINT t=type_expr RPAREN { TypeAnnotation(e, t) }
   | LPAREN t=uplet_expr RPAREN      { Tuple(t) }
   | EXL e=located(expr)             { Read(e) }
   | REF e=located(expr)             { Ref(e) }
@@ -210,87 +210,18 @@ expr_list:
   | SEMI e=located(expr) { [e] }
   | SEMI e=located(expr) SEMI l=expr_list { e::l }
 
-(*
-expr:
-  | e=located(expr_seq)  { e }
-  (* | LPAREN e=located(expr) DOUBLE_POINT t=type_expr RPAREN { TypeAnnotation(e, t) } *)
-
-expr_seq :
-  | e = expr_assign { Position.value e }
-  | e1=expr_assign e2=separated_nonempty_list(SEMI, expr) { Sequence(e1::e2) }
-
-expr_assign :
-  | e = located(expr_lambda) { e }
-  | e1=located(expr_lambda) DOUBLE_POINT EQ e2=expr_assign { loc_assign e1 e2 }
-
-expr_lambda :
-  | e = expr_or { e }
-  | BAKSL p=located(pattern) ARROW e=located(expr_or) { Fun(FunctionDefinition(p, e)) }
-
-expr_or :
-  | e = expr_and { Position.value e }
-  | b = located(expr_or) OR b2 = expr_and { Apply(b,b2) }
-
-expr_and :
-  | e = located(expr_eq) { e }
-  | b = located(expr_and) AND b2 = located(located(expr_eq)) { loc_apply b b2 }
-
-expr_eq :
-  | e = expr_rel { e }
-  | b = located(expr_eq) EQEQ b2 = located(expr_rel) { Apply(b,b2) }
-
-expr_rel :
-  | e = expr_add { Position.value e }
-  | b = located(expr_rel) LEQ b2 = expr_add { Apply(b,b2) }
-  | b = located(expr_rel) GEQ b2 = expr_add { Apply(b,b2) }
-  | b = located(expr_rel) LT b2 = expr_add { Apply(b,b2) }
-  | b = located(expr_rel) GT b2 = expr_add { Apply(b,b2) }
-
-expr_add :
-  | e = located(expr_mul) { e }
-  | b = located(expr_add) PLUS b2 = located(located(expr_mul)) { loc_apply b b2 }
-  | b = located(expr_add) MINUS b2 = located(located(expr_mul)) { loc_apply b b2 }
-
-expr_mul :
-  | e = expr_app { Position.value e }
-  | b = located(expr_mul) STAR b2 = expr_app { Apply(b,b2) }
-  | b = located(expr_mul) DIV b2 = expr_app { Apply(b,b2) }
-
-expr_app :
-  | e = located(expr_postfix) { e }
-  | e1=expr_app e2=located(expr_postfix)       { loc_assign e1 e2 }
-
-expr_postfix :
-  | e = expr_atom { Position.value e }
-  | e=located(expr_postfix) DOT l=located(IDENT) t=type_option { Field(e, loc_lid l, t) } 
-
-expr_atom:
-  | x=located(INT)                  { Position.with_poss $startpos $endpos (Literal(loc_int x)) }
-  | x=located(CHAR)                 { Position.with_poss $startpos $endpos (Literal(loc_char x)) }
-  | x=located(STRING)               { Position.with_poss $startpos $endpos (Literal(loc_string x)) }
-  | x=located(IDENT) t=type_option  { Position.with_poss $startpos $endpos (Variable((loc_id x), t)) }
-  | x=located(CONSTR) t=type_option e=separated_nonempty_list(COM, expr) { loc_tagged (loc_kid x) t e }
-  | LPAREN RPAREN                   { loc_tuple (Position.unknown_pos []) }
-  | LPAREN e=located(expr) RPAREN            { Position.value e }
-  | MATCH LPAREN e=located(expr) RPAREN LBRACE b=branches RBRACE { loc_case e b }
-  | ite=located(if_then_else) { ite }
-  | WHILE LPAREN e1=located(expr) RPAREN LBRACE e2=located(expr) RBRACE { loc_while e1 e2 }
-  | DO LBRACE e1=located(expr) RBRACE UNTIL LPAREN e2=located(expr) RPAREN { loc_while e1 e2}
-  | FOR v=located(IDENT) FROM e1=located(expr) TO e2=located(expr) LBRACE e3=located(expr) RBRACE { loc_for (loc_id v) e1 e2 e3 }
-  | REF e=located(expr)            { loc_ref e }
-  | EXL e=located(expr)            { loc_read e }
-  | LPAREN t=located(uplet_expr) RPAREN { loc_tuple t}
-  | LBRACE l=located(separated_nonempty_list(COM, label)) RBRACE t=located(type_option) {loc_record l t }
-*)
+expr_option:
+  | LPAREN s=separated_nonempty_list(COM, located(expr_atom)) RPAREN { s }
+  | { [] }
 
 if_then_else:
   | IF LPAREN e1=located(expr) RPAREN THEN LBRACE e2=located(expr) RPAREN { IfThenElse(e1, e2, e2) }
   | IF LPAREN e1=located(expr) RPAREN THEN LBRACE e2=located(expr) RPAREN ELSE LBRACE e3=located(expr) RBRACE { IfThenElse(e1, e2, e3) }
 
 type_option:
-  | INF SUP     { Some [] }
-  | t=type_list { Some t }
-  |             { None }
+  | INF t=type_list SUP { Some t }
+  | INF SUP             { Some [] }
+  |                     { None }
 
 uplet_expr:
   | e1=located(expr) COM e2=located(expr) t=uplet_rest { e1 :: e2 :: t }
