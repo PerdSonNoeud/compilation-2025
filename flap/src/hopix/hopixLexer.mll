@@ -48,10 +48,8 @@ rule token = parse
   | "from"          { FROM }
   | "to"            { TO }
   | "match"         { MATCH }
-  | "with"          { WITH }
   | "fun"           { FUN }
   | "let"           { LET }
-  | "in"            { IN }
   | "type"          { TYPE }
   | "extern"        { EXTERN }
   | "ref"           { REF }
@@ -71,7 +69,6 @@ rule token = parse
   | "'" (atom) "'" as a          { CHAR (String.get a 1) }
   (** TODO: Vérifier si les guillemets au milieu des chaines de caractères sont bel et bien impossible *)
   | '"' ( atom | '\'' | "\\\"" | [^'"'] )* '"' as s { STRING s }
-
 
     (** Ponctuation *)
   | "("             { LPAREN }
