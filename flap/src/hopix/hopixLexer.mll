@@ -3,7 +3,6 @@
   open Error
   open Position
   open HopixParser
-  open Mint
 
   let next_line_and f lexbuf  =
     Lexing.new_line lexbuf;
@@ -32,7 +31,7 @@ rule token = parse
   (** Layout *)
   | newline         { next_line_and token lexbuf }
   | blank+          { token lexbuf               }
-  
+
   (** Commentaires *)
   | "##" [^ '\n']*   { token lexbuf }
   | "{*"            { comment 1 lexbuf}
@@ -60,14 +59,15 @@ rule token = parse
   | upper identchar* as id       { CONSTR id }
 
   (** Littéraux entiers *)
-  | '-'? digit+ as n             { INT (Mint.of_string n) }
-  | "0x" ['0'-'9' 'a'-'f' 'A' - 'F']+ as n   { INT (Mint.of_string n) }
-  | "0b" ['0'-'1']+ as n         { INT (Mint.of_string n) }
-  | "0o" ['0'-'7']+ as n         { INT (Mint.of_string n) }
+  | (('-'? digit+) | "0x" ['0'-'9' 'a'-'f' 'A'-'F']+ | ("0b" | "0B") ['0'-'1']+ | "0o" ['0'-'7']+) as n
+    {
+      try INT (Mint.of_string n)
+      (* TODO: Mint.DoesNotFit *)
+      with Failure _ -> error lexbuf "Integer literal too large."
+    }
 
   (** caractères et chaines *)
   | "'" (atom) "'" as a          { CHAR (String.get a 1) }
-  (** TODO: Vérifier si les guillemets au milieu des chaines de caractères sont bel et bien impossible *)
   | '"' ( atom | '\'' | "\\\"" | [^'"'] )* '"' as s { STRING s }
 
     (** Ponctuation *)

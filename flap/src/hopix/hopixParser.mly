@@ -1,6 +1,5 @@
 %{ (* -*- tuareg -*- *)
   open HopixAST
-  open Position
 
   let map_loc f x = Position.map f x
 
@@ -43,7 +42,7 @@
 
 %token<string> TYPE_VARIABLE IDENT CONSTR
 %token<string> STRING
-%token<int64> INT
+%token<Mint.t> INT
 %token<char> CHAR
 
 (*
