@@ -15,13 +15,14 @@
 let newline = ('\010' | '\013' | "\013\010")
 let blank   = [' ' '\009' '\012']
 
+let hexa = ['0'-'9' 'a'-'f' 'A'-'F']
 let digit = ['0'-'9']
 let lower = ['a'-'z']
 let upper = ['A'-'Z']
 
 let identchar = ['A'-'Z' 'a'-'z' '0'-'9' '_']
-let decimal_escape = '\\' ['0'-'9']['0'-'9']['0'-'9']
-let hexa_escape = "\\x" ['0'-'9' 'a'-'f' 'A'-'F']['0'-'9' 'a'-'f' 'A'-'F']
+let decimal_escape = '\\' digit digit digit
+let hexa_escape = "\\0" ("x" | "X") hexa hexa
 let simple_escape = '\\' ['n' 't' 'b' 'r' '\\' '\'' '"']
 let printable = ['\032'-'\126']
 
@@ -67,8 +68,36 @@ rule token = parse
     }
 
   (** caractères et chaines *)
-  | "'" (atom) "'" as a          { CHAR (String.get a 1) }
-  | '"' ( atom | '\'' | "\\\"" | [^'"'] )* '"' as s { STRING s }
+  (** Atom  *)
+  | "'\\n'"         { CHAR '\n' }
+  | "'\\t'"         { CHAR '\t' }
+  | "'\\b'"         { CHAR '\b' }
+  | "'\\r'"         { CHAR '\r' }
+  | "'\\\\'"        { CHAR '\\' }
+  | "'\\''"         { CHAR '\'' }
+  | "'\\" (digit digit digit as i) "'" {
+      let c = int_of_string i in
+      if c < 0 || c > 255
+      then error lexbuf "Invalid decimal escape code."
+      else CHAR (char_of_int c)
+    }
+  | "'\\0" ("x" | "X") (hexa hexa as i) "'" {
+      let c = int_of_string ("0x" ^ i) in
+      if c < 0 || c > 255
+      then error lexbuf "Invalid hexadecimal escape code."
+      else CHAR (char_of_int c)
+    }
+  | "'\\0" ("b" | "B") (['0'-'1']+ as i) "'" {
+      let c = int_of_string ("0b" ^ i) in
+      if c < 0 || c > 255
+      then error lexbuf "Invalid binary escape code." 
+      else CHAR (char_of_int c)
+    }
+
+  | ('\'' ((printable # '\'') as c) '\'') { CHAR c }
+
+  (* TODO: rework "..." so that we can verify if an opened '"' is closed *)
+  | '"' ( atom | "'" | "\"" # '"' )* '"' as s { STRING s }
 
     (** Ponctuation *)
   | "("             { LPAREN }
