@@ -64,7 +64,7 @@ let apply_binop op e1 e2 =
 
 %left IF WHILE DO FOR MATCH FUN REF
 %left BAKSL DOT EXL LBRACE LET LPAREN COM
-%right SEMI DOUBLE_POINT
+%right SEMI DOUBLE_POINT ARROW
 
 %left OR           
 %left AND          
