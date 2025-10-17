@@ -35,6 +35,14 @@
   let loc_variable x y = map_loc (fun s -> Variable (s, y)) x
   let loc_apply x y = map_loc2 (fun s z-> Apply(s,z)) x y
 
+let apply_binop op e1 e2 = 
+    Apply({ value = Apply({ 
+            value = Variable({ 
+                value = Id op; position = Position.dummy 
+            }, None); position = Position.dummy 
+        }, e1); position = Position.dummy 
+    }, e2)
+
 
 %}
 
@@ -182,9 +190,8 @@ type_scheme :
 (**Expressions*)
 (* TODO: Binary operations *)
 
-
-
 expr:
+
   (* for var_id from expr to expr {expr} *)
   | FOR v=located(IDENT) FROM e1=located(expr) TO e2=located(expr) LBRACE e3=located(expr) RBRACE { For(loc_id v, e1, e2, e3) }
   (* Do {expr} until (expr) ? *)
