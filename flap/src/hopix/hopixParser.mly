@@ -187,6 +187,10 @@ expr_simp:
   | LBRACE l=separated_nonempty_list(COM, label) RBRACE t=type_option { Record(l, t) }
   | e=located(expr) DOT l=located(IDENT) t=type_option { Field(e, loc_lid l, t) }
   | v=vdefinition SEMI e=located(expr) { Define(v, e) }
+  | e1=located(expr_simp) op=binop e2=located(expr)
+    { Apply({ value = Apply({ value = Variable({ value = Id op; position = Position.dummy }, None); position = Position.dummy }, e1); position = Position.dummy }, e2) }
+
+
   | e1=located(expr) e2=located(expr) { Apply(e1, e2) }
 
   | e=expr_atom                     { e }
@@ -204,6 +208,23 @@ expr_atom:
   | REF e=located(expr_atom)        { Ref(e) }
 
   | LPAREN e=located(expr) RPAREN   { Position.value e }
+
+
+binop:
+  | PLUS   { "+" }
+  | MINUS  { "-" }
+  | STAR  { "*" }
+  | DIV    { "/" }
+  | AND { "&&" }
+  | OR   { "||" }
+  | INF   { "<" }
+  | SUP   { ">" }
+  | LEQ   { "<=?" }
+  | GEQ   { ">=?" }
+  | LT   { "<?" }
+  | GT   { ">?" }
+  | EQEQ   { "=?" } 
+
 
 expr_list:
   | SEMI e=located(expr) { [e] }
