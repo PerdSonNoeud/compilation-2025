@@ -63,14 +63,16 @@ let apply_binop op e1 e2 =
 *)
 
 %left IF WHILE DO FOR MATCH FUN REF
-%left BAKSL DOT EXL LBRACE LET LPAREN COM
+%left BAKSL DOT EXL LBRACE LET LPAREN COM 
 %right SEMI DOUBLE_POINT ARROW
 
-%left OR           
-%left AND          
-%left EQ EQEQ 
+%left OR
+%left AND
+%nonassoc EQEQ
+%nonassoc LT GT LEQ GEQ INF SUP
 %left PLUS MINUS
 %left STAR DIV
+%right EQ
 
 
 %nonassoc CONSTR
