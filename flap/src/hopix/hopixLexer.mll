@@ -10,6 +10,9 @@
 
   let error lexbuf =
     error "lexing" (lex_join lexbuf.lex_start_p lexbuf.lex_curr_p)
+
+  let string_buffer =
+    Buffer.create 13
 }
 
 let newline = ('\010' | '\013' | "\013\010")
@@ -96,8 +99,8 @@ rule token = parse
 
   | ('\'' ((printable # '\'') as c) '\'') { CHAR c }
 
-  (* TODO: rework "..." so that we can verify if an opened '"' is closed *)
-  | '"' ( atom | "'" | "\"" # '"' )* '"' as s { STRING s }
+
+  | '"'             { string lexbuf }
 
     (** Ponctuation *)
   | "("             { LPAREN }
@@ -145,3 +148,38 @@ and comment depth = parse
   | eof             { error lexbuf "commentaire non terminé" }
   | _               { comment depth lexbuf }
 
+and string = parse
+  | "\\n"           { Buffer.add_char string_buffer '\n'; string lexbuf }
+  | "\\t"           { Buffer.add_char string_buffer '\t'; string lexbuf }
+  | "\\b"           { Buffer.add_char string_buffer '\b'; string lexbuf }
+  | "\\r"           { Buffer.add_char string_buffer '\r'; string lexbuf }
+  | '\\' '\''       { Buffer.add_char string_buffer '\''; string lexbuf }
+  | '\\' '"'        { Buffer.add_char string_buffer '"'; string lexbuf }
+  | "\\\\"          { Buffer.add_char string_buffer '\\'; string lexbuf }
+  | '\\' (_ as c)   { error lexbuf
+      (Printf.sprintf "Bad escape sequence in string '\\%c'" c)
+    }
+  | "\\" (digit digit digit as i) {
+      let c = int_of_string i in
+      if c < 0 || c > 255
+      then error lexbuf "Invalid decimal escape code.";
+      Buffer.add_char string_buffer (char_of_int c); string lexbuf
+    }
+  | "\\0" ("x" | "X") (hexa hexa as i) {
+      let c = int_of_string ("0x" ^ i) in
+      if c < 0 || c > 255
+      then error lexbuf "invalid hexadecimal escape code.";
+      Buffer.add_char string_buffer (char_of_int c); string lexbuf
+    }
+  | "\\0" ("b" | "B") (['0'-'1']+ as i) {
+      let c = int_of_string ("0b" ^ i) in
+      if c < 0 || c > 255
+      then error lexbuf "invalid binary escape code.";
+      Buffer.add_char string_buffer (char_of_int c); string lexbuf
+    }
+  | '"'             {
+      let s = Buffer.contents string_buffer in
+      Buffer.clear string_buffer; STRING s
+    }
+  | _ as c          { Buffer.add_char string_buffer c; string lexbuf }
+  | eof             { error lexbuf "Unterminated string." }

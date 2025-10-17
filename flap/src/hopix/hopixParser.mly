@@ -206,9 +206,10 @@ expr:
   | ite=if_then_else                { ite }
   | BAKSL p=located(pattern) ARROW e=located(expr) { Fun(FunctionDefinition(p, e)) }
   | LBRACE l=separated_nonempty_list(COM, label) RBRACE t=type_option { Record(l, t) }
+  | LPAREN e=located(expr) DOUBLE_POINT t=type_expr RPAREN { TypeAnnotation(e, t) }
   | e=located(expr) DOT l=located(IDENT) t=type_option { Field(e, loc_lid l, t) }
+  | e1=located(expr) e2=located(expr_atom) { Apply(e1, e2) }
   | v=vdefinition SEMI e=located(expr) { Define(v, e) }
-  | e1=located(expr) e2=located(expr) { Apply(e1, e2) }
 
   | e=expr_atom                     { e }
 
@@ -220,11 +221,10 @@ expr_atom:
   | x=located(STRING)               { Literal(loc_string x) }
   | x=located(CHAR)                 { Literal(loc_char x) }
   | x=located(INT)                  { Literal(loc_int x) }
-  | LPAREN RPAREN                   { Tuple([]) }
-  | LPAREN e=located(expr) DOUBLE_POINT t=type_expr RPAREN { TypeAnnotation(e, t) }
   | LPAREN t=uplet_expr RPAREN      { Tuple(t) }
-  | EXL e=located(expr)             { Read(e) }
-  | REF e=located(expr)             { Ref(e) }
+  | LPAREN RPAREN                   { Tuple([]) }
+  | EXL e=located(expr_atom)        { Read(e) }
+  | REF e=located(expr_atom)        { Ref(e) }
 
   | LPAREN e=located(expr) RPAREN   { Position.value e }
 
