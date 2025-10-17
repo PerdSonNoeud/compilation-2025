@@ -75,6 +75,7 @@ let apply_binop op e1 e2 =
 %right EQ
 
 
+
 %nonassoc CONSTR
 
 
@@ -200,7 +201,6 @@ expr:
   | DO LBRACE e1=located(located(expr)) RBRACE UNTIL LPAREN e2=located(located(expr)) RPAREN { Sequence((Position.value e1)::[loc_while e2 e1]) }
   | WHILE LPAREN e1=located(expr) RPAREN LBRACE e2=located(expr) RBRACE { While(e1, e2) }
   | MATCH LPAREN e=located(expr) RPAREN LBRACE b=branches RBRACE { Case(e, b) }
-  | e1=located(expr) DOUBLE_POINT EQ e2=located(expr) { Assign(e1, e2) }
   | e1=located(expr) op=binop e2=located(expr){ apply_binop op e1 e2}
 
   | e1=located(expr) e2=expr_list   { Sequence(e1::e2) }
@@ -209,12 +209,14 @@ expr:
   | LBRACE l=separated_nonempty_list(COM, label) RBRACE t=type_option { Record(l, t) }
   | LPAREN e=located(expr) DOUBLE_POINT t=type_expr RPAREN { TypeAnnotation(e, t) }
   | e=located(expr) DOT l=located(IDENT) t=type_option { Field(e, loc_lid l, t) }
-  | e1=located(expr) e2=located(expr_atom) { Apply(e1, e2) }
+
   | v=vdefinition SEMI e=located(expr) { Define(v, e) }
 
-  | e=expr_atom                     { e }
+  | e=expr_apply                     { e }
 
-
+expr_apply:
+  | e1=located(expr_apply) e2=located(expr_atom) { Apply(e1, e2) }
+  | e = expr_atom {e}
 
 expr_atom:
   | x=located(CONSTR) t=type_option e=expr_option { Tagged(loc_kid x, t, e) }
