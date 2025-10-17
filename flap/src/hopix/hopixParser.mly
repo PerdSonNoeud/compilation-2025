@@ -199,8 +199,7 @@ expr:
   | WHILE LPAREN e1=located(expr) RPAREN LBRACE e2=located(expr) RBRACE { While(e1, e2) }
   | MATCH LPAREN e=located(expr) RPAREN LBRACE b=branches RBRACE { Case(e, b) }
   | e1=located(expr) DOUBLE_POINT EQ e2=located(expr) { Assign(e1, e2) }
-  | e1=located(expr) op=binop e2=located(expr)
-    { Apply({ value = Apply({ value = Variable({ value = Id op; position = Position.dummy }, None); position = Position.dummy }, e1); position = Position.dummy }, e2) }
+  | e1=located(expr) op=binop e2=located(expr){ apply_binop op e1 e2}
 
   | e1=located(expr) e2=expr_list   { Sequence(e1::e2) }
   | ite=if_then_else                { ite }
