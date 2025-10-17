@@ -176,17 +176,17 @@ expr:
   | DO LBRACE e1=located(located(expr)) RBRACE UNTIL LPAREN e2=located(located(expr)) RPAREN { Sequence((Position.value e1)::[loc_while e2 e1]) }
   | WHILE LPAREN e1=located(expr) RPAREN LBRACE e2=located(expr) RBRACE { While(e1, e2) }
   | MATCH LPAREN e=located(expr) RPAREN LBRACE b=branches RBRACE { Case(e, b) }
-  | e1=located(expr) DOUBLE_POINT EQ e2=located(expr_simp) { Assign(e1, e2) }
+  | e1=located(expr) DOUBLE_POINT EQ e2=located(expr) { Assign(e1, e2) }
   | e1=located(expr) e2=expr_list   { Sequence(e1::e2) }
   | ite=if_then_else                { ite }
 
   | e=expr_simp                     { e }
 
 expr_simp:
-  | BAKSL p=located(pattern) ARROW e=located(expr_simp) { Fun(FunctionDefinition(p, e)) }
+  | BAKSL p=located(pattern) ARROW e=located(expr) { Fun(FunctionDefinition(p, e)) }
   | LBRACE l=separated_nonempty_list(COM, label) RBRACE t=type_option { Record(l, t) }
   | e=located(expr) DOT l=located(IDENT) t=type_option { Field(e, loc_lid l, t) }
-  | v=vdefinition SEMI e=located(expr_simp) { Define(v, e) }
+  | v=vdefinition SEMI e=located(expr) { Define(v, e) }
   | e1=located(expr) e2=located(expr) { Apply(e1, e2) }
 
   | e=expr_atom                     { e }
@@ -197,11 +197,11 @@ expr_atom:
   | x=located(STRING)               { Literal(loc_string x) }
   | x=located(CHAR)                 { Literal(loc_char x) }
   | x=located(INT)                  { Literal(loc_int x) }
-  | LPAREN RPAREN                   { Tuple([]) }
   | LPAREN e=located(expr) DOUBLE_POINT t=type_expr RPAREN { TypeAnnotation(e, t) }
   | LPAREN t=uplet_expr RPAREN      { Tuple(t) }
-  | EXL e=located(expr)             { Read(e) }
-  | REF e=located(expr)             { Ref(e) }
+  | LPAREN RPAREN                   { Tuple([]) }
+  | EXL e=located(expr_atom)        { Read(e) }
+  | REF e=located(expr_atom)        { Ref(e) }
 
   | LPAREN e=located(expr) RPAREN   { Position.value e }
 
