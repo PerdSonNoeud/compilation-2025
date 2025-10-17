@@ -43,7 +43,6 @@ let apply_binop op e1 e2 =
         }, e1); position = Position.dummy 
     }, e2)
 
-
 %}
 
 %token EOF
@@ -54,13 +53,6 @@ let apply_binop op e1 e2 =
 %token<string> STRING
 %token<Mint.t> INT
 %token<char> CHAR
-
-(*
-%left OR
-%left AND
-%nonassoc EQEQ LEQ GEQ LT GT
-%left PLUS MINUS STAR DIV EQ
-*)
 
 %left IF WHILE DO FOR MATCH FUN REF
 %left BAKSL DOT EXL LBRACE LET LPAREN COM 
@@ -74,11 +66,7 @@ let apply_binop op e1 e2 =
 %left STAR DIV
 %right EQ
 
-
-
 %nonassoc CONSTR
-
-
 
 %start<HopixAST.t> program
 %%
@@ -128,11 +116,9 @@ opt_def:
   | EQ a=tdefinition {a}
   | { Abstract }
 
-
-liste_variable : 
+liste_variable:
   | i1 = located(TYPE_VARIABLE) COM i2 = liste_variable {loc_tid i1::i2 }
   | i = located(TYPE_VARIABLE) { [loc_tid i] }
-
 
 bar_opt :
   | BAR {}
@@ -147,14 +133,15 @@ option_type_list:
   | LPAREN l = liste_tDef RPAREN { l }
   | { [] }
 
-liste_tDef : 
+liste_tDef:
   | t = type_expr { [t] }
   | t1 = type_expr COM t2 = liste_tDef { t1::t2}
 
 (**syntaxe des types*)
 
-type_expr :
-  | t1= type_arrow { t1 }
+type_expr:
+  | t=type_arrow { t }
+  | t=type_app   { t }
 
 type_arrow :
   | t1 = type_uplets ARROW t2 = type_arrow {
@@ -167,8 +154,7 @@ type_arrow :
   | t = located(type_uplets) {loc_tyTuple t }
 
 type_uplets:
-  | t= type_app { [t] }
-  | t1 = type_uplets STAR t2= type_app { t1@[t2] }
+  | t=type_app STAR tl=separated_nonempty_list(STAR, type_app) { t::tl }
 
 type_app:
   | t1 = located(type_con) INF t2 = located(type_list) SUP {loc_tyCon t1 t2 }
@@ -191,10 +177,8 @@ type_scheme :
   | LCROCHET l = liste_variable RCROCHET t= type_expr { ForallTy(l,t) }
 
 (**Expressions*)
-(* TODO: Binary operations *)
 
 expr:
-
   (* for var_id from expr to expr {expr} *)
   | FOR v=located(IDENT) FROM e1=located(expr) TO e2=located(expr) LBRACE e3=located(expr) RBRACE { For(loc_id v, e1, e2, e3) }
   (* Do {expr} until (expr) ? *)
@@ -232,7 +216,6 @@ expr_atom:
 
   | LPAREN e=located(expr) RPAREN   { Position.value e }
 
-
 binop:
   | PLUS   { "+" }
   | MINUS  { "-" }
@@ -244,13 +227,7 @@ binop:
   | GEQ   { ">=?" }
   | LT   { "<?" }
   | GT   { ">?" }
-  | EQEQ   { "=?" }  
-
-
-
-
-
-
+  | EQEQ   { "=?" }
 
 expr_list:
   | SEMI e=located(expr) { [e] }
@@ -332,8 +309,6 @@ opt_p1 :
 opt_args:
   | LPAREN l = separated_nonempty_list(COM, located(pattern)) RPAREN { Some l }
   | { None }
-
-
 
 %inline located(X): x=X {
   Position.with_poss $startpos $endpos x
