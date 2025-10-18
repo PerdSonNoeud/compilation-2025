@@ -49,24 +49,13 @@ let apply_binop op e1 e2 =
 %token IF THEN ELSE WHILE DO UNTIL FOR FROM TO MATCH FUN LET TYPE EXTERN REF
 %token LPAREN RPAREN LBRACE RBRACE SEMI EQ PLUS MINUS STAR DIV AND OR LEQ GEQ LT GT EQEQ INF SUP COM DOT BAR BAKSL ARROW DOUBLE_POINT UNDER EXL LCROCHET RCROCHET ESP
 
-%token<string> TYPE_VARIABLE IDENT CONSTR
-%token<string> STRING
+%token<string> TYPE_VARIABLE IDENT CONSTR STRING
 %token<Mint.t> INT
 %token<char> CHAR
 
-%left IF WHILE DO FOR MATCH FUN REF
-%left BAKSL DOT EXL LBRACE LET LPAREN COM 
-%right SEMI DOUBLE_POINT ARROW
-
-%left OR
-%left AND
-%nonassoc EQEQ
-%nonassoc LT GT LEQ GEQ INF SUP
-%left PLUS MINUS
-%left STAR DIV
-%right EQ
-
-%nonassoc CONSTR
+%left DOT OR AND PLUS MINUS STAR DIV
+%right SEMI DOUBLE_POINT ARROW EQ
+%nonassoc EQEQ LT GT LEQ GEQ
 
 %start<HopixAST.t> program
 %%
@@ -90,10 +79,10 @@ definition:
 
 tdefinition :
   | bar_opt i = located(CONSTR) l = option_type_list xs = liste_constr { DefineSumType((loc_kid i, l)::xs) }
-  | LBRACE i = located(IDENT) DOUBLE_POINT t = type_expr l = liste_label RBRACE { DefineRecordType((loc_lid i ,t)::l) }
+  | LBRACE i = located(IDENT) DOUBLE_POINT t=located(type_expr) l=liste_label RBRACE { DefineRecordType((loc_lid i ,t)::l) }
 
 liste_label :
-  | COM i = located(IDENT) DOUBLE_POINT t = type_expr l = liste_label { ((loc_lid i),t)::l }
+  | COM i = located(IDENT) DOUBLE_POINT t=located(type_expr) l = liste_label { ((loc_lid i),t)::l }
   | { [] }
 
 (** Vdefinition *)
@@ -134,47 +123,35 @@ option_type_list:
   | { [] }
 
 liste_tDef:
-  | t = type_expr { [t] }
-  | t1 = type_expr COM t2 = liste_tDef { t1::t2}
+  | t=separated_nonempty_list(COM, located(type_expr)) { t }
 
 (**syntaxe des types*)
 
+type_scheme :
+  | LCROCHET l=liste_variable RCROCHET t=located(type_expr) { ForallTy(l,t) }
+
 type_expr:
   | t=type_arrow { t }
-  | t=type_app   { t }
 
-type_arrow :
-  | t1 = type_uplets ARROW t2 = type_arrow {
-    let aux =
-      match t1 with
-        | [x] -> x
-        | l ->  Position.with_poss $startpos $endpos (TyTuple l)
-      in Position.with_poss $startpos $endpos (TyArrow (aux, t2))
-    }
-  | t = located(type_uplets) {loc_tyTuple t }
+type_arrow:
+  | t=located(type_uplets) ARROW tl=located(type_arrow) { TyArrow(t, tl) }
+  | t=type_uplets { t }
 
 type_uplets:
-  | t=type_app STAR tl=separated_nonempty_list(STAR, type_app) { t::tl }
+  | t=located(type_app) STAR tl=separated_nonempty_list(STAR, located(type_app)) { TyTuple(t::tl) }
+  | t=type_app { t }
 
 type_app:
-  | t1 = located(type_con) INF t2 = located(type_list) SUP {loc_tyCon t1 t2 }
-  | t = located(type_con) { loc_tyCon t (Position.unknown_pos []) }
-  | v = located(type_var) { loc_tyVar v }
-  | LPAREN t = type_expr RPAREN { t }
+  | t=IDENT tl=type_opt         { TyCon(TCon t, tl) }
+  | v=TYPE_VARIABLE             { TyVar(TId v) }
+  | LPAREN t=located(type_expr) RPAREN { Position.value t }
+
+type_opt:
+  | INF t=type_list SUP { t }
+  |                     { [] }
 
 type_list:
-  | t= type_expr { [t] }
-  | t1= type_list COM t2= type_expr { t1@[t2] }
-
-type_con:
-  | i = IDENT { TCon i }
-
-type_var:
-  | i = TYPE_VARIABLE { TId i }
-
-
-type_scheme :
-  | LCROCHET l = liste_variable RCROCHET t= type_expr { ForallTy(l,t) }
+  | t=separated_nonempty_list(COM, located(type_expr)) { t }
 
 (**Expressions*)
 
@@ -192,7 +169,7 @@ expr:
   | ite=if_then_else                { ite }
   | BAKSL p=located(pattern) ARROW e=located(expr) { Fun(FunctionDefinition(p, e)) }
   | LBRACE l=separated_nonempty_list(COM, label) RBRACE t=type_option { Record(l, t) }
-  | LPAREN e=located(expr) DOUBLE_POINT t=type_expr RPAREN { TypeAnnotation(e, t) }
+  | LPAREN e=located(expr) DOUBLE_POINT t=located(type_expr) RPAREN { TypeAnnotation(e, t) }
   | e=located(expr) DOT l=located(IDENT) t=type_option { Field(e, loc_lid l, t) }
 
   | v=vdefinition SEMI e=located(expr) { Define(v, e) }
@@ -282,8 +259,8 @@ pattern_and:
     }
 
 pattern_annot:
-  | p = located(pattern_simp) DOUBLE_POINT t = type_expr { PTypeAnnotation(p, t) }
-  | p = pattern_simp { p }
+  | p=located(pattern_simp) DOUBLE_POINT t=located(type_expr) { PTypeAnnotation(p, t) }
+  | p=pattern_simp { p }
 
 pattern_simp:
   | LPAREN l=separated_nonempty_list(COM, located(pattern)) RPAREN { PTuple(l) }
@@ -303,7 +280,7 @@ pattern_atom:
   | s = located(STRING)   { PLiteral(loc_string s) }
 
 opt_p1 :
-  | INF t = separated_nonempty_list(COM,type_expr) SUP { Some t }
+  | INF t = separated_nonempty_list(COM, located(type_expr)) SUP { Some t }
   | { None }
 
 opt_args:
