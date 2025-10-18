@@ -207,8 +207,8 @@ expr_option:
   | { [] }
 
 if_then_else:
-  | IF LPAREN e1=located(expr) RPAREN THEN LBRACE e2=located(expr) RPAREN { IfThenElse(e1, e2, e2) }
-  | IF LPAREN e1=located(expr) RPAREN THEN LBRACE e2=located(expr) RPAREN ELSE LBRACE e3=located(expr) RBRACE { IfThenElse(e1, e2, e3) }
+  | IF LPAREN e1=located(expr) RPAREN THEN LBRACE e2=located(expr) RBRACE { IfThenElse(e1, e2, e2) }
+  | IF LPAREN e1=located(expr) RPAREN THEN LBRACE e2=located(expr) RBRACE ELSE LBRACE e3=located(expr) RBRACE { IfThenElse(e1, e2, e3) }
 
 type_option:
   | INF t=type_list SUP { Some t }
