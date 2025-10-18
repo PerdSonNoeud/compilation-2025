@@ -66,16 +66,40 @@ program:
 
 (**définitions*)
 definition:
-  | TYPE i=located(IDENT) INF t = liste_variable SUP a= opt_def {
-    (DefineType(loc_tcon i , t, a))}
-
-  | TYPE i=located(IDENT) a=  opt_def {
-    (DefineType(loc_tcon i , [], a))}
-
-  | EXTERN v=located(IDENT) DOUBLE_POINT t = located(type_scheme) {
-    (DeclareExtern(loc_id v ,t)) }
-
+  | TYPE i=located(IDENT) t=opt_var a=opt_def { DefineType(loc_tcon i , t, a) }
+  | EXTERN v=located(IDENT) DOUBLE_POINT t = located(type_scheme) { DeclareExtern(loc_id v ,t) }
   | v=vdefinition         { DefineValue(v) }
+
+opt_var:
+  | INF t=liste_variable SUP { t }
+  |                          { [] }
+
+type_scheme :
+  | LCROCHET l=liste_variable RCROCHET t=located(type_expr) { ForallTy(l, t) }
+  | t=located(type_expr) { ForallTy([], t) }
+
+type_expr:
+  | t=type_arrow { t }
+
+type_arrow:
+  | t=located(type_uplets) ARROW tl=located(type_arrow) { TyArrow(t, tl) }
+  | t=type_uplets { t }
+
+type_uplets:
+  | t=located(type_app) STAR tl=separated_nonempty_list(STAR, located(type_app)) { TyTuple(t::tl) }
+  | t=type_app { t }
+
+type_app:
+  | t=IDENT tl=type_opt         { TyCon(TCon t, tl) }
+  | v=TYPE_VARIABLE             { TyVar(TId v) }
+  | LPAREN t=located(type_expr) RPAREN { Position.value t }
+
+type_opt:
+  | INF t=type_list SUP { t }
+  |                     { [] }
+
+type_list:
+  | t=separated_nonempty_list(COM, located(type_expr)) { t }
 
 tdefinition :
   | bar_opt i = located(CONSTR) l = option_type_list xs = liste_constr { DefineSumType((loc_kid i, l)::xs) }
@@ -126,32 +150,6 @@ liste_tDef:
   | t=separated_nonempty_list(COM, located(type_expr)) { t }
 
 (**syntaxe des types*)
-
-type_scheme :
-  | LCROCHET l=liste_variable RCROCHET t=located(type_expr) { ForallTy(l,t) }
-
-type_expr:
-  | t=type_arrow { t }
-
-type_arrow:
-  | t=located(type_uplets) ARROW tl=located(type_arrow) { TyArrow(t, tl) }
-  | t=type_uplets { t }
-
-type_uplets:
-  | t=located(type_app) STAR tl=separated_nonempty_list(STAR, located(type_app)) { TyTuple(t::tl) }
-  | t=type_app { t }
-
-type_app:
-  | t=IDENT tl=type_opt         { TyCon(TCon t, tl) }
-  | v=TYPE_VARIABLE             { TyVar(TId v) }
-  | LPAREN t=located(type_expr) RPAREN { Position.value t }
-
-type_opt:
-  | INF t=type_list SUP { t }
-  |                     { [] }
-
-type_list:
-  | t=separated_nonempty_list(COM, located(type_expr)) { t }
 
 (**Expressions*)
 
