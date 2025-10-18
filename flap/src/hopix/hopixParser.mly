@@ -79,10 +79,7 @@ type_scheme :
   | t=located(type_expr) { ForallTy([], t) }
 
 type_expr:
-  | t=type_arrow { t }
-
-type_arrow:
-  | t=located(type_uplets) ARROW tl=located(type_arrow) { TyArrow(t, tl) }
+  | t=located(type_expr) ARROW tl=located(type_expr) { TyArrow(t, tl) }
   | t=type_uplets { t }
 
 type_uplets:
