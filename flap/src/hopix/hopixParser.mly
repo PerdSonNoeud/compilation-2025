@@ -146,10 +146,7 @@ option_type_list:
 liste_tDef:
   | t=separated_nonempty_list(COM, located(type_expr)) { t }
 
-(**syntaxe des types*)
-
 (**Expressions*)
-
 expr:
   (* for var_id from expr to expr {expr} *)
   | FOR v=located(IDENT) FROM e1=located(expr) TO e2=located(expr) LBRACE e3=located(expr) RBRACE { For(loc_id v, e1, e2, e3) }
@@ -165,6 +162,7 @@ expr:
   | BAKSL p=located(pattern) ARROW e=located(expr) { Fun(FunctionDefinition(p, e)) }
   | LBRACE l=separated_nonempty_list(COM, label) RBRACE t=type_option { Record(l, t) }
   | LPAREN e=located(expr) DOUBLE_POINT t=located(type_expr) RPAREN { TypeAnnotation(e, t) }
+  | x=located(CONSTR) t=type_option e=expr_option { Tagged(loc_kid x, t, e) }
   | e=located(expr) DOT l=located(IDENT) t=type_option { Field(e, loc_lid l, t) }
 
   | v=vdefinition SEMI e=located(expr) { Define(v, e) }
@@ -176,7 +174,6 @@ expr_apply:
   | e = expr_atom {e}
 
 expr_atom:
-  | x=located(CONSTR) t=type_option e=expr_option { Tagged(loc_kid x, t, e) }
   | x=located(IDENT) t=type_option  { Variable(loc_id x, t) }
   | x=located(STRING)               { Literal(loc_string x) }
   | x=located(CHAR)                 { Literal(loc_char x) }
@@ -189,24 +186,24 @@ expr_atom:
   | LPAREN e=located(expr) RPAREN   { Position.value e }
 
 binop:
-  | PLUS   { "+" }
-  | MINUS  { "-" }
-  | STAR  { "*" }
-  | DIV    { "/" }
-  | AND { "&&" }
-  | OR   { "||" }
-  | LEQ   { "<=?" }
-  | GEQ   { ">=?" }
-  | LT   { "<?" }
-  | GT   { ">?" }
-  | EQEQ   { "=?" }
+  | PLUS    { "+" }
+  | MINUS   { "-" }
+  | STAR    { "*" }
+  | DIV     { "/" }
+  | AND     { "&&" }
+  | OR      { "||" }
+  | LEQ     { "<=?" }
+  | GEQ     { ">=?" }
+  | LT      { "<?" }
+  | GT      { ">?" }
+  | EQEQ    { "=?" }
 
 expr_list:
   | SEMI e=located(expr) { [e] }
   | SEMI e=located(expr) SEMI l=expr_list { e::l }
 
 expr_option:
-  | LPAREN s=separated_nonempty_list(COM, located(expr_atom)) RPAREN { s }
+  | LPAREN s=separated_nonempty_list(COM, located(expr)) RPAREN { s }
   | { [] }
 
 if_then_else:
