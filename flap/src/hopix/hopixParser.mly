@@ -161,7 +161,6 @@ expr:
   | ite=if_then_else                { ite }
   | BAKSL p=located(pattern) ARROW e=located(expr) { Fun(FunctionDefinition(p, e)) }
   | LBRACE l=separated_nonempty_list(COM, label) RBRACE t=type_option { Record(l, t) }
-  | LPAREN e=located(expr) DOUBLE_POINT t=located(type_expr) RPAREN { TypeAnnotation(e, t) }
   | e=located(expr) DOT l=located(IDENT) t=type_option { Field(e, loc_lid l, t) }
 
   | e1=located(expr) SEMI e2=located(expr) { Sequence([e1; e2]) }
@@ -174,12 +173,12 @@ expr_apply:
   | e = expr_atom {e}
 
 expr_atom:
-  | x=located(CONSTR) t=type_option LPAREN s=separated_nonempty_list(COM, located(expr)) RPAREN { Tagged(loc_kid x, t, s) }
-  | x=located(CONSTR) t=type_option { Tagged(loc_kid x, t, []) }
   | x=located(IDENT) t=type_option  { Variable(loc_id x, t) }
   | x=located(STRING)               { Literal(loc_string x) }
   | x=located(CHAR)                 { Literal(loc_char x) }
   | x=located(INT)                  { Literal(loc_int x) }
+  | x=located(CONSTR) t=type_option e=expr_option { Tagged(loc_kid x, t, e) }
+  | LPAREN e=located(expr) DOUBLE_POINT t=located(type_expr) RPAREN { TypeAnnotation(e, t) }
   | LPAREN t=uplet_expr RPAREN      { Tuple(t) }
   | LPAREN RPAREN                   { Tuple([]) }
   | EXL e=located(expr_atom)        { Read(e) }
@@ -199,6 +198,10 @@ expr_atom:
   | LT      { Id("`<?`") }
   | GT      { Id("`>?`") }
   | EQEQ    { Id("`=?`") }
+
+expr_option:
+  | LPAREN s=separated_nonempty_list(COM, located(expr)) RPAREN { s }
+  | { [] }
 
 if_then_else:
   | IF LPAREN e1=located(expr) RPAREN THEN LBRACE e2=located(expr) RBRACE { IfThenElse(e1, e2, e2) }
