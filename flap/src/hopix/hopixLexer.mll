@@ -52,6 +52,7 @@ rule token = parse
   | "to"            { TO }
   | "match"         { MATCH }
   | "fun"           { FUN }
+  | "and"           { FAND }
   | "let"           { LET }
   | "type"          { TYPE }
   | "extern"        { EXTERN }

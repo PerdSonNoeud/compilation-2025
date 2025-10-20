@@ -35,27 +35,25 @@
   let loc_variable x y = map_loc (fun s -> Variable (s, y)) x
   let loc_apply x y = map_loc2 (fun s z-> Apply(s,z)) x y
 
-let apply_binop op e1 e2 = 
-    Apply({ value = Apply({ 
-            value = Variable({ 
-                value = Id op; position = Position.dummy 
-            }, None); position = Position.dummy 
-        }, e1); position = Position.dummy 
-    }, e2)
-
 %}
 
 %token EOF
-%token IF THEN ELSE WHILE DO UNTIL FOR FROM TO MATCH FUN LET TYPE EXTERN REF
+%token IF THEN ELSE WHILE DO UNTIL FOR FROM TO MATCH FUN FAND LET TYPE EXTERN REF
 %token LPAREN RPAREN LBRACE RBRACE SEMI EQ PLUS MINUS STAR DIV AND OR LEQ GEQ LT GT EQEQ INF SUP COM DOT BAR BAKSL ARROW DOUBLE_POINT UNDER EXL LCROCHET RCROCHET ESP
 
 %token<string> TYPE_VARIABLE IDENT CONSTR STRING
 %token<Mint.t> INT
 %token<char> CHAR
 
-%left DOT OR AND PLUS MINUS STAR DIV
-%right SEMI DOUBLE_POINT ARROW EQ
-%nonassoc EQEQ LT GT LEQ GEQ
+%right ARROW
+%right SEMI
+%left EQ LT GT LEQ GEQ
+%left PLUS MINUS
+%left STAR DIV
+%left OR AND
+%right DOT DOUBLE_POINT
+%nonassoc EQEQ
+%left BAR ESP
 
 %start<HopixAST.t> program
 %%
@@ -107,7 +105,7 @@ liste_label :
   | { [] }
 
 (** Vdefinition *)
-vdefinition:
+%inline vdefinition:
   | LET v=located(IDENT) s=opt_scheme EQ e=located(expr) { SimpleValue(loc_id v, s, e) }
   | FUN f=fundef l=liste_fun { RecFunctions(f::l) }
 
@@ -116,7 +114,7 @@ opt_scheme:
   |                                     { None }
 
 liste_fun:
-  | AND f=fundef l=liste_fun { f::l }
+  | FAND f=fundef l=liste_fun { f::l }
   | { [] }
 
 fundef:
@@ -149,22 +147,24 @@ liste_tDef:
 (**Expressions*)
 expr:
   (* for var_id from expr to expr {expr} *)
-  | FOR v=located(IDENT) FROM e1=located(expr) TO e2=located(expr) LBRACE e3=located(expr) RBRACE { For(loc_id v, e1, e2, e3) }
+  | FOR v=located(IDENT) FROM LPAREN e1=located(expr) RPAREN TO LPAREN e2=located(expr) RPAREN LBRACE e3=located(expr) RBRACE { For(loc_id v, e1, e2, e3) }
   (* Do {expr} until (expr) ? *)
   | DO LBRACE e1=located(located(expr)) RBRACE UNTIL LPAREN e2=located(located(expr)) RPAREN { Sequence((Position.value e1)::[loc_while e2 e1]) }
   | WHILE LPAREN e1=located(expr) RPAREN LBRACE e2=located(expr) RBRACE { While(e1, e2) }
   | MATCH LPAREN e=located(expr) RPAREN LBRACE b=branches RBRACE { Case(e, b) }
   | e1=located(expr) DOUBLE_POINT EQ e2=located(expr) { Assign(e1, e2) }
-  | e1=located(expr) op=binop e2=located(expr_apply){ apply_binop op e1 e2}
+  | e1=located(expr) op=located(binop) e2=located(expr){
+      let loc_binop = Position.with_poss $startpos $endpos (Variable(op, None))
+        in Apply (Position.with_poss $startpos $endpos (Apply (loc_binop, e1)), e2)
+    }
 
-  | e1=located(expr) e2=expr_list   { Sequence(e1::e2) }
   | ite=if_then_else                { ite }
   | BAKSL p=located(pattern) ARROW e=located(expr) { Fun(FunctionDefinition(p, e)) }
   | LBRACE l=separated_nonempty_list(COM, label) RBRACE t=type_option { Record(l, t) }
   | LPAREN e=located(expr) DOUBLE_POINT t=located(type_expr) RPAREN { TypeAnnotation(e, t) }
-  | x=located(CONSTR) t=type_option e=expr_option { Tagged(loc_kid x, t, e) }
   | e=located(expr) DOT l=located(IDENT) t=type_option { Field(e, loc_lid l, t) }
 
+  | e1=located(expr) SEMI e2=located(expr) { Sequence([e1; e2]) }
   | v=vdefinition SEMI e=located(expr) { Define(v, e) }
 
   | e=expr_apply                     { e }
@@ -174,6 +174,8 @@ expr_apply:
   | e = expr_atom {e}
 
 expr_atom:
+  | x=located(CONSTR) t=type_option LPAREN s=separated_nonempty_list(COM, located(expr)) RPAREN { Tagged(loc_kid x, t, s) }
+  | x=located(CONSTR) t=type_option { Tagged(loc_kid x, t, []) }
   | x=located(IDENT) t=type_option  { Variable(loc_id x, t) }
   | x=located(STRING)               { Literal(loc_string x) }
   | x=located(CHAR)                 { Literal(loc_char x) }
@@ -183,28 +185,20 @@ expr_atom:
   | EXL e=located(expr_atom)        { Read(e) }
   | REF e=located(expr_atom)        { Ref(e) }
 
-  | LPAREN e=located(expr) RPAREN   { Position.value e }
+  | LPAREN e=expr RPAREN   { e }
 
-binop:
-  | PLUS    { "+" }
-  | MINUS   { "-" }
-  | STAR    { "*" }
-  | DIV     { "/" }
-  | AND     { "&&" }
-  | OR      { "||" }
-  | LEQ     { "<=?" }
-  | GEQ     { ">=?" }
-  | LT      { "<?" }
-  | GT      { ">?" }
-  | EQEQ    { "=?" }
-
-expr_list:
-  | SEMI e=located(expr) { [e] }
-  | SEMI e=located(expr) SEMI l=expr_list { e::l }
-
-expr_option:
-  | LPAREN s=separated_nonempty_list(COM, located(expr)) RPAREN { s }
-  | { [] }
+%inline binop:
+  | PLUS    { Id("`+`") }
+  | MINUS   { Id("`-`") }
+  | STAR    { Id("`*`") }
+  | DIV     { Id("`/`") }
+  | AND     { Id("`&&`") }
+  | OR      { Id("`||`") }
+  | LEQ     { Id("`<=?`") }
+  | GEQ     { Id("`>=?`") }
+  | LT      { Id("`<?`") }
+  | GT      { Id("`>?`") }
+  | EQEQ    { Id("`=?`") }
 
 if_then_else:
   | IF LPAREN e1=located(expr) RPAREN THEN LBRACE e2=located(expr) RBRACE { IfThenElse(e1, e2, e2) }
@@ -220,7 +214,7 @@ uplet_expr:
 
 uplet_rest:
   | COM e=located(expr) t=uplet_rest { e :: t }
-  |  { [] }
+  | { [] }
 
 label:
   | l=located(IDENT) EQ e=located(expr) { (loc_lid l, e) }
@@ -234,35 +228,24 @@ branch:
 
 (**Pattern*)
 pattern:
-  | p = pattern_or { p }
-
-pattern_or:
-  | l = separated_nonempty_list(BAR, located(pattern_and)) {
-      match l with
-      | [p]  -> Position.value p
-      | ps -> POr ps
-    }
-
-pattern_and:
-  | l = separated_nonempty_list(ESP, located(pattern_annot)) {
+  | p1=located(pattern) BAR p2=located(pattern) {POr([p1; p2])}
+  | p1=located(pattern) ESP p2=located(pattern) {PAnd([p1; p2])}
+  | LPAREN l=separated_nonempty_list(COM, located(pattern)) RPAREN {
       match l with
       | [p] -> Position.value p
-      | ps  -> PAnd ps
+      | _   -> PTuple(l)
     }
-
-pattern_annot:
   | p=located(pattern_simp) DOUBLE_POINT t=located(type_expr) { PTypeAnnotation(p, t) }
   | p=pattern_simp { p }
 
 pattern_simp:
-  | LPAREN l=separated_nonempty_list(COM, located(pattern)) RPAREN { PTuple(l) }
   | c = located(CONSTR) t = opt_p1 args = opt_args
       { PTaggedValue(loc_kid c, t, Option.value ~default:[] args) }
   | LBRACE fields = separated_nonempty_list(COM, record_field) RBRACE t = opt_p1 { PRecord(fields, t) }
   | a = pattern_atom { a }
 
 record_field:
-  | i = located(IDENT) EQ p = located(pattern_simp) { (loc_lid i, p) }
+  | i = located(IDENT) EQ p = located(pattern) { (loc_lid i, p) }
 
 pattern_atom:
   | v = located(IDENT)    { PVariable(loc_id v) }
