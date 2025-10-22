@@ -330,8 +330,16 @@ and expression' environment memory e =
 
    and E = [runtime.environment], M = [runtime.memory].
 *)
-and expression _ environment memory =
-failwith "Students! This is your job!"
+and expression _ environment memory = function
+      | Literal(pos)-> literal pos memory    
+      | Variable(id,l)-> failwith "Students! This is your job!"
+      | _ -> failwith "Students! This is your job!"
+
+and literal pos memory =
+    match pos.value with 
+   | LInt(x) -> (VInt x, memory)
+   | LChar(x) -> (VChar x, memory)
+   | LString(x) -> (VString x, memory)
 
 (** This function returns the difference between two runtimes. *)
 and extract_observable runtime runtime' =
