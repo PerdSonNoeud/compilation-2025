@@ -319,7 +319,33 @@ let rec evaluate runtime ast =
 
 *)
 and definition runtime d =
-failwith "Students! This is your job!"
+  match d.value with
+  | DefineValue(vdef) ->
+      begin
+        match vdef with
+        | SimpleValue(pdef)    -> simp_val runtime pdef
+        | RecFunctions(fundef) -> failwith "a"
+      end
+  | _                 -> failwith "a"
+
+and simp_val runtime pdef =
+  let env = runtime.environment in
+  let mem = runtime.memory in
+  let (_, _, expr) = pdef in
+  expression' env mem expr
+(*
+and rec_fun runtime d =
+  let env = runtime.environment in
+  let mem = runtime.memory in
+  match d with
+  | h::t ->
+      begin
+      let (_, _, fundef) = h in
+      let FunctionDefinition(_, expr) = fundef in
+      rec_fun (expression' env mem expr) t
+      end
+  | []   -> failwith "tmp"
+*)
 
 and expression' environment memory e =
   expression (position e) environment memory (value e)
