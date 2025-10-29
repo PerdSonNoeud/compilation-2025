@@ -332,10 +332,9 @@ and simp_val runtime pdef =
   let env = runtime.environment in
   let mem = runtime.memory in
   let (id, _ty_opt, expr) = pdef in
-  let (v, new_mem) =
-    expression expr.position env mem expr.value in
+  let (v, new_mem) = expression expr.position env mem expr.value in
       let new_env = Environment.bind env id.value v in
-        { runtime with environment = new_env; memory = new_mem }
+        { environment = new_env; memory = new_mem }
 (*
 and rec_fun runtime d =
   let env = runtime.environment in
@@ -360,9 +359,11 @@ and expression' environment memory e =
    and E = [runtime.environment], M = [runtime.memory].
 *)
 and expression _ environment memory = function
-      | Literal(pos)-> literal pos memory    
+      | Literal(pos)-> literal pos memory
+
       | Variable (id, _) ->
-        let v = Environment.lookup (Position.position id) (Position.value id) environment in (v, memory)
+        let v = Environment.lookup id.position id.value environment in
+        (v, memory)
 
       | Apply (e1, e2) ->
         let (v1, mem1) = expression' environment memory e1 in
@@ -372,7 +373,7 @@ and expression _ environment memory = function
       | _ -> failwith "Students! This is your job!"
 
 and literal pos memory =
-    match pos.value with 
+  match pos.value with
    | LInt(x) -> (VInt x, memory)
    | LChar(x) -> (VChar x, memory)
    | LString(x) -> (VString x, memory)
