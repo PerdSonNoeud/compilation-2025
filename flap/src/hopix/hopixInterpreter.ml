@@ -326,13 +326,16 @@ and definition runtime d =
         | SimpleValue(pdef)    -> simp_val runtime pdef
         | RecFunctions(fundef) -> failwith "a"
       end
-  | _                 -> failwith "a"
+  | DeclareExtern(_)  -> runtime
 
 and simp_val runtime pdef =
   let env = runtime.environment in
   let mem = runtime.memory in
-  let (_, _, expr) = pdef in
-  expression' env mem expr
+  let (id, _ty_opt, expr) = pdef in
+  let (v, new_mem) =
+    expression expr.position env mem expr.value in
+      let new_env = Environment.bind env id.value v in
+        { runtime with environment = new_env; memory = new_mem }
 (*
 and rec_fun runtime d =
   let env = runtime.environment in
@@ -358,7 +361,14 @@ and expression' environment memory e =
 *)
 and expression _ environment memory = function
       | Literal(pos)-> literal pos memory    
-      | Variable(id,l)-> failwith "Students! This is your job!"
+      | Variable (id, _) ->
+        let v = Environment.lookup (Position.position id) (Position.value id) environment in (v, memory)
+
+      | Apply (e1, e2) ->
+        let (v1, mem1) = expression' environment memory e1 in
+        let (v2, mem2) = expression' environment mem1 e2 in
+        apply (Position.position e1) environment mem2 v1 v2
+
       | _ -> failwith "Students! This is your job!"
 
 and literal pos memory =
@@ -366,6 +376,13 @@ and literal pos memory =
    | LInt(x) -> (VInt x, memory)
    | LChar(x) -> (VChar x, memory)
    | LString(x) -> (VString x, memory)
+
+and apply pos env mem v1 v2 =
+  match v1 with
+  | VPrimitive (_, f) ->
+      let v = f mem v2 in (v, mem)
+
+  | _ -> failwith "problème"
 
 (** This function returns the difference between two runtimes. *)
 and extract_observable runtime runtime' =
