@@ -319,7 +319,14 @@ let rec evaluate runtime ast =
 
 *)
 and definition runtime d =
-failwith "Students! This is your job!"
+    match d.value with
+        | DefineValue (SimpleValue (id, _ty_opt, expr)) ->
+            let (v, mem) =
+                expression expr.position runtime.environment runtime.memory expr.value in
+                    let env = Environment.bind runtime.environment id.value v in
+                        { runtime with environment = env; memory = mem }
+
+        | _ -> failwith "Students! This is your job!"
 
 and expression' environment memory e =
   expression (position e) environment memory (value e)
@@ -332,7 +339,15 @@ and expression' environment memory e =
 *)
 and expression _ environment memory = function
       | Literal(pos)-> literal pos memory    
-      | Variable(id,l)-> failwith "Students! This is your job!"
+      | Variable (id, _) ->
+        let v = Environment.lookup (Position.position id) (Position.value id) environment in (v, memory)
+
+      | Apply (e1, e2) ->
+        let (v1, mem1) = expression' environment memory e1 in
+        let (v2, mem2) = expression' environment mem1 e2 in
+        apply (Position.position e1) environment mem2 v1 v2
+
+
       | _ -> failwith "Students! This is your job!"
 
 and literal pos memory =
@@ -340,6 +355,14 @@ and literal pos memory =
    | LInt(x) -> (VInt x, memory)
    | LChar(x) -> (VChar x, memory)
    | LString(x) -> (VString x, memory)
+
+and apply pos env mem v1 v2 =
+  match v1 with
+  | VPrimitive (_, f) ->
+      let v = f mem v2 in (v, mem)
+
+  | _ -> failwith "problème"
+
 
 (** This function returns the difference between two runtimes. *)
 and extract_observable runtime runtime' =
