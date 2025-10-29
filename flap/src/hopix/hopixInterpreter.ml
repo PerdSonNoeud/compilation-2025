@@ -346,13 +346,35 @@ and expression _ environment memory = function
         let (v1, mem1) = expression' environment memory e1 in
         let (v2, mem2) = expression' environment mem1 e2 in
         apply (Position.position e1) environment mem2 v1 v2
+        
+      (*tentative de tuple*)
+      | Tuple es ->
+        let rec eval_all env mem = function
+            | [] -> ([], mem)
+            | e :: xs ->
+                let (v, mem1) = expression e.position env mem e.value in
+                let (vs, mem2) = eval_all env mem1 xs in
+                    (v :: vs, mem2)
+        in let (vs, mem') = eval_all environment memory es in
+            (VTuple vs, mem')
+
+      | Tagged (constructor, _, exprs) ->
+            let rec eval_list env mem = function
+                | [] -> ([], mem)
+                | e :: xs ->
+                    let (v, mem1) = expression' env mem e in
+                        let (vs, mem2) = eval_list env mem1 xs in
+                            (v :: vs, mem2)
+            in let (values, mem') = eval_list environment memory exprs in
+                (VTagged (Position.value constructor, values), mem')
+
 
 
       | _ -> failwith "Students! This is your job!"
 
 and literal pos memory =
     match pos.value with 
-   | LInt(x) -> (VInt x, memory)
+   | LInt(x) -> (VInt x, memory) 
    | LChar(x) -> (VChar x, memory)
    | LString(x) -> (VString x, memory)
 
