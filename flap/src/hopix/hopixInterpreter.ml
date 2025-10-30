@@ -372,8 +372,7 @@ and expression _ environment memory = function
     apply (Position.position e1) environment mem2 v1 v2
 
   | Define (vd, e) ->
-    let runtime =
-      value_definition vd { environment = environment; memory = memory } in
+    let runtime = value_definition vd { environment; memory } in
     expression' runtime.environment runtime.memory e
 
   | Tuple es ->
