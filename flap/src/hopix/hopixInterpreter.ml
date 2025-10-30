@@ -319,14 +319,36 @@ let rec evaluate runtime ast =
 
 *)
 and definition runtime d =
-    match d.value with
-        | DefineValue (SimpleValue (id, _ty_opt, expr)) ->
-            let (v, mem) =
-                expression expr.position runtime.environment runtime.memory expr.value in
-                    let env = Environment.bind runtime.environment id.value v in
-                        { runtime with environment = env; memory = mem }
+  match d.value with
+  | DefineValue(vdef) -> value_definition vdef runtime
+  | _                 -> runtime
 
-        | _ -> failwith "Students! This is your job!"
+and value_definition vdef runtime =
+  match vdef with
+  | SimpleValue(pdef)    -> simp_val runtime pdef
+  | RecFunctions(fundef) -> failwith "a"
+
+and simp_val runtime pdef =
+  let env = runtime.environment in
+  let mem = runtime.memory in
+  let (id, _ty_opt, expr) = pdef in
+  let (v, new_mem) = expression expr.position env mem expr.value in
+      let new_env = Environment.bind env id.value v in
+        { environment = new_env; memory = new_mem }
+
+(*
+and rec_fun runtime d =
+  let env = runtime.environment in
+  let mem = runtime.memory in
+  match d with
+  | h::t ->
+      begin
+      let (_, _, fundef) = h in
+      let FunctionDefinition(_, expr) = fundef in
+      rec_fun (expression' env mem expr) t
+      end
+  | []   -> failwith "tmp"
+*)
 
 and expression' environment memory e =
   expression (position e) environment memory (value e)
@@ -338,43 +360,46 @@ and expression' environment memory e =
    and E = [runtime.environment], M = [runtime.memory].
 *)
 and expression _ environment memory = function
-      | Literal(pos)-> literal pos memory    
-      | Variable (id, _) ->
-        let v = Environment.lookup (Position.position id) (Position.value id) environment in (v, memory)
+  | Literal (pos)  -> literal pos memory
 
-      | Apply (e1, e2) ->
-        let (v1, mem1) = expression' environment memory e1 in
-        let (v2, mem2) = expression' environment mem1 e2 in
-        apply (Position.position e1) environment mem2 v1 v2
-        
-      (*tentative de tuple*)
-      | Tuple es ->
-        let rec eval_all env mem = function
+  | Variable (id, _) ->
+    let v = Environment.lookup id.position id.value environment in
+    (v, memory)
+
+  | Apply (e1, e2) ->
+    let (v1, mem1) = expression' environment memory e1 in
+    let (v2, mem2) = expression' environment mem1 e2 in
+    apply (Position.position e1) environment mem2 v1 v2
+
+  | Define (vd, e) ->
+    let runtime = value_definition vd { environment; memory } in
+    expression' runtime.environment runtime.memory e
+
+  | Tuple es ->
+    let rec eval_all env mem = function
+        | [] -> ([], mem)
+        | e :: xs ->
+            let (v, mem1) = expression e.position env mem e.value in
+            let (vs, mem2) = eval_all env mem1 xs in
+                (v :: vs, mem2)
+    in let (vs, mem') = eval_all environment memory es in
+        (VTuple vs, mem')
+
+  | Tagged (constructor, _, exprs) ->
+        let rec eval_list env mem = function
             | [] -> ([], mem)
             | e :: xs ->
-                let (v, mem1) = expression e.position env mem e.value in
-                let (vs, mem2) = eval_all env mem1 xs in
-                    (v :: vs, mem2)
-        in let (vs, mem') = eval_all environment memory es in
-            (VTuple vs, mem')
+                let (v, mem1) = expression' env mem e in
+                    let (vs, mem2) = eval_list env mem1 xs in
+                        (v :: vs, mem2)
+        in let (values, mem') = eval_list environment memory exprs in
+            (VTagged (Position.value constructor, values), mem')
 
-      | Tagged (constructor, _, exprs) ->
-            let rec eval_list env mem = function
-                | [] -> ([], mem)
-                | e :: xs ->
-                    let (v, mem1) = expression' env mem e in
-                        let (vs, mem2) = eval_list env mem1 xs in
-                            (v :: vs, mem2)
-            in let (values, mem') = eval_list environment memory exprs in
-                (VTagged (Position.value constructor, values), mem')
-
-
-
-      | _ -> failwith "Students! This is your job!"
+  | _ -> failwith "Students! This is your job!"
 
 and literal pos memory =
-    match pos.value with 
-   | LInt(x) -> (VInt x, memory) 
+  match pos.value with
+   | LInt(x) -> (VInt x, memory)
    | LChar(x) -> (VChar x, memory)
    | LString(x) -> (VString x, memory)
 
@@ -384,7 +409,6 @@ and apply pos env mem v1 v2 =
       let v = f mem v2 in (v, mem)
 
   | _ -> failwith "problème"
-
 
 (** This function returns the difference between two runtimes. *)
 and extract_observable runtime runtime' =
