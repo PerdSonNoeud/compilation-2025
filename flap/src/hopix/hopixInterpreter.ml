@@ -402,7 +402,43 @@ and expression _ environment memory = function
         in let (values, mem') = eval_list environment memory exprs in
             (VTagged (Position.value constructor, values), mem')
 
+
+
+  | Record (fields, _) ->
+    let rec eval_fields env mem = function
+      | [] -> ([], mem)
+      | (label, expr) :: xs ->
+          let (v, mem1) = expression' env mem expr in
+          let (vs, mem2) = eval_fields env mem1 xs in
+            ((Position.value label, v) :: vs, mem2)
+    in let (evaluated_fields, mem') = eval_fields environment memory fields in
+    (VRecord evaluated_fields, mem')
+
+
+  | Field (e, label, _) ->
+    let (v, mem') = expression' environment memory e in
+    (match v with
+     | VRecord fields ->
+         let lbl = Position.value label in
+         (try let value = List.assoc lbl fields in (value, mem')
+          with Not_found -> failwith ("Field not found"))
+     | _ -> failwith "Field sur un non record")
+
+
+  | Sequence expr ->
+    let rec eval_seq env mem = function
+      | [] -> failwith "sequence vide"
+      | [last] -> expression' env mem last
+      | e :: xs ->
+          let (_, mem1) = expression' env mem e in
+          eval_seq env mem1 xs
+    in eval_seq environment memory expr
+
+
+
   | _ -> failwith "Students! This is your job!"
+
+
 
 and literal pos memory =
   match pos.value with
