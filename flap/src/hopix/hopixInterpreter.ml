@@ -320,13 +320,13 @@ let rec evaluate runtime ast =
 *)
 and definition runtime d =
   match d.value with
-  | DefineValue(vdef) ->
-      begin
-        match vdef with
-        | SimpleValue(pdef)    -> simp_val runtime pdef
-        | RecFunctions(fundef) -> failwith "a"
-      end
-  | DeclareExtern(_)  -> runtime
+  | DefineValue(vdef) -> value_definition vdef runtime
+  | _                 -> runtime
+
+and value_definition vdef runtime =
+  match vdef with
+  | SimpleValue(pdef)    -> simp_val runtime pdef
+  | RecFunctions(fundef) -> failwith "a"
 
 and simp_val runtime pdef =
   let env = runtime.environment in
@@ -335,6 +335,7 @@ and simp_val runtime pdef =
   let (v, new_mem) = expression expr.position env mem expr.value in
       let new_env = Environment.bind env id.value v in
         { environment = new_env; memory = new_mem }
+
 (*
 and rec_fun runtime d =
   let env = runtime.environment in
@@ -359,40 +360,43 @@ and expression' environment memory e =
    and E = [runtime.environment], M = [runtime.memory].
 *)
 and expression _ environment memory = function
-      | Literal(pos)-> literal pos memory
+  | Literal (pos)  -> literal pos memory
 
-      | Variable (id, _) ->
-        let v = Environment.lookup id.position id.value environment in
-        (v, memory)
+  | Variable (id, _) ->
+    let v = Environment.lookup id.position id.value environment in
+    (v, memory)
 
-      | Apply (e1, e2) ->
-        let (v1, mem1) = expression' environment memory e1 in
-        let (v2, mem2) = expression' environment mem1 e2 in
-        apply (Position.position e1) environment mem2 v1 v2
+  | Apply (e1, e2) ->
+    let (v1, mem1) = expression' environment memory e1 in
+    let (v2, mem2) = expression' environment mem1 e2 in
+    apply (Position.position e1) environment mem2 v1 v2
 
-      (*tentative de tuple*)
-      | Tuple es ->
-        let rec eval_all env mem = function
+  | Define (vd, e) ->
+    let runtime =
+      value_definition vd { environment = environment; memory = memory } in
+    expression' runtime.environment runtime.memory e
+
+  | Tuple es ->
+    let rec eval_all env mem = function
+        | [] -> ([], mem)
+        | e :: xs ->
+            let (v, mem1) = expression e.position env mem e.value in
+            let (vs, mem2) = eval_all env mem1 xs in
+                (v :: vs, mem2)
+    in let (vs, mem') = eval_all environment memory es in
+        (VTuple vs, mem')
+
+  | Tagged (constructor, _, exprs) ->
+        let rec eval_list env mem = function
             | [] -> ([], mem)
             | e :: xs ->
-                let (v, mem1) = expression e.position env mem e.value in
-                let (vs, mem2) = eval_all env mem1 xs in
-                    (v :: vs, mem2)
-        in let (vs, mem') = eval_all environment memory es in
-            (VTuple vs, mem')
+                let (v, mem1) = expression' env mem e in
+                    let (vs, mem2) = eval_list env mem1 xs in
+                        (v :: vs, mem2)
+        in let (values, mem') = eval_list environment memory exprs in
+            (VTagged (Position.value constructor, values), mem')
 
-      | Tagged (constructor, _, exprs) ->
-            let rec eval_list env mem = function
-                | [] -> ([], mem)
-                | e :: xs ->
-                    let (v, mem1) = expression' env mem e in
-                        let (vs, mem2) = eval_list env mem1 xs in
-                            (v :: vs, mem2)
-            in let (values, mem') = eval_list environment memory exprs in
-                (VTagged (Position.value constructor, values), mem')
-
-
-      | _ -> failwith "Students! This is your job!"
+  | _ -> failwith "Students! This is your job!"
 
 and literal pos memory =
   match pos.value with
