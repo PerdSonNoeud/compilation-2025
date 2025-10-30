@@ -380,7 +380,6 @@ and expression _ environment memory = function
     begin match value_as_bool v with
       | true -> expression' environment memory t
       | false -> expression' environment memory f
-      | _ -> failwith "problème"
     end
 
   | Tuple es ->
