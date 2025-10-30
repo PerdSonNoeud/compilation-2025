@@ -375,6 +375,13 @@ and expression _ environment memory = function
     let runtime = value_definition vd { environment; memory } in
     expression' runtime.environment runtime.memory e
 
+  | IfThenElse (c, t, f) ->
+    let (v, _) = expression' environment memory c in
+    begin match value_as_bool v with
+      | true -> expression' environment memory t
+      | false -> expression' environment memory f
+    end
+
   | Tuple es ->
     let rec eval_all env mem = function
         | [] -> ([], mem)
