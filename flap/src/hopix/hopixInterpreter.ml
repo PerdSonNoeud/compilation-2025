@@ -454,22 +454,19 @@ and apply env mem e1 e2 =
 
 and bind_pattern p v env =
   match p.value, v with
-
   | PVariable id, _ -> Environment.bind env id.value v
 
   | PWildcard, _ -> env
 
-  | PTypeAnnotation (p, _), _ ->
-      bind_pattern p v env
+  | PTypeAnnotation (p, _), _ -> bind_pattern p v env
 
   | PLiteral lit, _ when literal_matches lit.value v -> env
   | PLiteral _, _ -> failwith "problème"
 
-  | PTuple t1, VTuple t2 ->
-      bind_list t1 t2 env
+  | PTuple t1, VTuple t2 -> bind_list t1 t2 env
 
   | PTaggedValue (constr, _, p1), VTagged (constr', p2)
-    when Position.value constr = constr' -> bind_list p1 p2 env
+    when constr.value = constr' -> bind_list p1 p2 env
 
   | PRecord (fields, _), VRecord vals ->
       List.fold_left (fun e (lbl, p) ->
@@ -480,15 +477,11 @@ and bind_pattern p v env =
         in
         bind_pattern p v_field e
       ) env fields
+  | POr ou, _ -> try_first_match ou v env
 
-  | POr ou, _ ->
-      try_first_match ou v env
+  | PAnd et, _ -> List.fold_left (fun e p -> bind_pattern p v e) env et
 
-  | PAnd et, _ ->
-      List.fold_left (fun e p -> bind_pattern p v e) env et
-
-  | _ ->
-      failwith "Pattern matching failure"
+  | _ -> failwith "Pattern matching failure"
 
 and literal_matches lit v =
   match lit, v with
@@ -521,12 +514,21 @@ and case env mem v branches =
   match branches with
   | branch::next ->
     begin
-      (* Besoin de comparer tous les patterns pour trouver le bon *)
       let Branch(p, expr) = branch.value in
       let new_env = bind_pattern p v env in
-      expression' new_env mem expr
+      match p.value with
+      | PWildcard ->
+        expression' new_env mem expr
+      | PTaggedValue (con, _, cs) ->
+        let KId(c) = con.value in
+        begin
+          match value_as_tagged v with
+          | Some (KId(s), vs) when c = s -> expression' new_env mem expr
+          | _ -> case env mem v next
+        end
+      | _ -> case env mem v next
     end
-  | [] -> (v, mem)
+  | [] -> failwith "pas de match"
 
 (** This function returns the difference between two runtimes. *)
 and extract_observable runtime runtime' =
