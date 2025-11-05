@@ -378,6 +378,10 @@ and expression _ environment memory = function
     let (v, _) = expression' environment memory c in
     ifThenElse environment memory v t f
 
+  | Case (e, b) ->
+    let (v, _) = expression' environment memory e in
+    case environment memory v b
+
   | Tuple es ->
     let rec eval_all env mem = function
         | [] -> ([], mem)
@@ -493,13 +497,11 @@ and literal_matches lit v =
   | LString s, VString t -> s = t
   | _ -> false
 
-
 and bind_list l1 l2 env =
   if List.length l1 <> List.length l2 then
     failwith "Problème"
   else
     List.fold_left2 (fun e p v -> bind_pattern p v e) env l1 l2
-
 
 and try_first_match p v env =
   let rec aux = function
@@ -510,12 +512,21 @@ and try_first_match p v env =
   in
   aux p
 
-
-
 and ifThenElse env mem v t f =
   match value_as_bool v with
   | true -> expression' env mem t
   | false -> expression' env mem f
+
+and case env mem v branches =
+  match branches with
+  | branch::next ->
+    begin
+      (* Besoin de comparer tous les patterns pour trouver le bon *)
+      let Branch(p, expr) = branch.value in
+      let new_env = bind_pattern p v env in
+      expression' new_env mem expr
+    end
+  | [] -> (v, mem)
 
 (** This function returns the difference between two runtimes. *)
 and extract_observable runtime runtime' =
