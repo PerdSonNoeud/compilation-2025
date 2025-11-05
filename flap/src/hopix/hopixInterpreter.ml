@@ -326,29 +326,27 @@ and definition runtime d =
 and value_definition vdef runtime =
   match vdef with
   | SimpleValue(pdef)    -> simp_val runtime pdef
-  | RecFunctions(fundef) -> failwith "a"
+  | RecFunctions(fundef) -> rec_fun runtime fundef
 
 and simp_val runtime pdef =
   let env = runtime.environment in
   let mem = runtime.memory in
-  let (id, _ty_opt, expr) = pdef in
-  let (v, new_mem) = expression expr.position env mem expr.value in
-      let new_env = Environment.bind env id.value v in
-        { environment = new_env; memory = new_mem }
+  let (id, _, expr) = pdef in
+  let (v, new_mem) = expression' env mem expr in
+  let new_env = Environment.bind env id.value v in
+  { environment = new_env; memory = new_mem }
 
-(*
-and rec_fun runtime d =
+and rec_fun runtime fundef =
   let env = runtime.environment in
   let mem = runtime.memory in
-  match d with
+  match fundef with
   | h::t ->
-      begin
-      let (_, _, fundef) = h in
-      let FunctionDefinition(_, expr) = fundef in
-      rec_fun (expression' env mem expr) t
-      end
-  | []   -> failwith "tmp"
-*)
+      let (id, _, a) = h in
+      let FunctionDefinition(_, expr) = a in
+      let (v, new_mem) = expression' env mem expr in
+      let new_env = Environment.bind env id.value v in
+      rec_fun { environment = new_env; memory = new_mem } t
+  | []   -> runtime
 
 and expression' environment memory e =
   expression (position e) environment memory (value e)
@@ -367,20 +365,18 @@ and expression _ environment memory = function
     (v, memory)
 
   | Apply (e1, e2) ->
-    let (v1, mem1) = expression' environment memory e1 in
-    let (v2, mem2) = expression' environment mem1 e2 in
-    apply (Position.position e1) environment mem2 v1 v2
+    apply environment memory e1 e2
 
   | Define (vd, e) ->
     let runtime = value_definition vd { environment; memory } in
     expression' runtime.environment runtime.memory e
 
+  | Fun(FunctionDefinition(p, expr)) ->
+    (VClosure (environment, p, expr), memory)
+
   | IfThenElse (c, t, f) ->
     let (v, _) = expression' environment memory c in
-    begin match value_as_bool v with
-      | true -> expression' environment memory t
-      | false -> expression' environment memory f
-    end
+    ifThenElse environment memory v t f
 
   | Tuple es ->
     let rec eval_all env mem = function
@@ -402,8 +398,6 @@ and expression _ environment memory = function
         in let (values, mem') = eval_list environment memory exprs in
             (VTagged (Position.value constructor, values), mem')
 
-
-
   | Record (fields, _) ->
     let rec eval_fields env mem = function
       | [] -> ([], mem)
@@ -414,7 +408,6 @@ and expression _ environment memory = function
     in let (evaluated_fields, mem') = eval_fields environment memory fields in
     (VRecord evaluated_fields, mem')
 
-
   | Field (e, label, _) ->
     let (v, mem') = expression' environment memory e in
     (match v with
@@ -423,7 +416,6 @@ and expression _ environment memory = function
          (try let value = List.assoc lbl fields in (value, mem')
           with Not_found -> failwith ("Field not found"))
      | _ -> failwith "Field sur un non record")
-
 
   | Sequence expr ->
     let rec eval_seq env mem = function
@@ -434,24 +426,36 @@ and expression _ environment memory = function
           eval_seq env mem1 xs
     in eval_seq environment memory expr
 
-
-
   | _ -> failwith "Students! This is your job!"
-
-
 
 and literal pos memory =
   match pos.value with
-   | LInt(x) -> (VInt x, memory)
-   | LChar(x) -> (VChar x, memory)
-   | LString(x) -> (VString x, memory)
+  | LInt(x) -> (VInt x, memory)
+  | LChar(x) -> (VChar x, memory)
+  | LString(x) -> (VString x, memory)
 
-and apply pos env mem v1 v2 =
+and apply env mem e1 e2 =
+  let (v1, mem1) = expression' env mem e1 in
+  let (v2, mem2) = expression' env mem e2 in
   match v1 with
+  | VClosure (env_, p, expr) ->
+      let new_env = Environment.bind env_ (pattern p.value) v2 in
+      expression' new_env mem expr
+
   | VPrimitive (_, f) ->
-      let v = f mem v2 in (v, mem)
+    let v = f mem v2 in (v, mem)
 
   | _ -> failwith "problème"
+
+and pattern p =
+  match p with
+  | PVariable (id) -> id.value
+  | _ -> failwith "jsp"
+
+and ifThenElse env mem v t f =
+  match value_as_bool v with
+  | true -> expression' env mem t
+  | false -> expression' env mem f
 
 (** This function returns the difference between two runtimes. *)
 and extract_observable runtime runtime' =
