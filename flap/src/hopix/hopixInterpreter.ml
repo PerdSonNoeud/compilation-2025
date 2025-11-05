@@ -436,21 +436,87 @@ and literal pos memory =
 
 and apply env mem e1 e2 =
   let (v1, mem1) = expression' env mem e1 in
-  let (v2, mem2) = expression' env mem e2 in
+  let (v2, mem2) = expression' env mem1 e2 in
   match v1 with
   | VClosure (env_, p, expr) ->
-      let new_env = Environment.bind env_ (pattern p.value) v2 in
-      expression' new_env mem expr
+      let new_env = bind_pattern p v2 env_ in
+      expression' new_env mem2 expr
 
   | VPrimitive (_, f) ->
-    let v = f mem v2 in (v, mem)
+      let v = f mem v2 in
+      (v, mem)
 
   | _ -> failwith "problème"
+
 
 and pattern p =
   match p with
   | PVariable (id) -> id.value
   | _ -> failwith "jsp"
+
+and bind_pattern p v env =
+  match p.value, v with
+
+  | PVariable id, _ -> Environment.bind env id.value v
+
+  | PWildcard, _ -> env
+
+  | PTypeAnnotation (p, _), _ ->
+      bind_pattern p v env
+
+  | PLiteral lit, _ when literal_matches lit.value v -> env
+  | PLiteral _, _ -> failwith "problème"
+
+  | PTuple t1, VTuple t2 ->
+      bind_list t1 t2 env
+
+  | PTaggedValue (constr, _, p1), VTagged (constr', p2)
+    when Position.value constr = constr' -> bind_list p1 p2 env
+
+  | PRecord (fields, _), VRecord vals ->
+      List.fold_left (fun e (lbl, p) ->
+        let lbl = Position.value lbl in
+        let v_field =
+          try List.assoc lbl vals with Not_found ->
+            failwith "problème"
+        in
+        bind_pattern p v_field e
+      ) env fields
+
+  | POr ou, _ ->
+      try_first_match ou v env
+
+  | PAnd et, _ ->
+      List.fold_left (fun e p -> bind_pattern p v e) env et
+
+  | _ ->
+      failwith "Pattern matching failure"
+
+and literal_matches lit v =
+  match lit, v with
+  | LInt x, VInt y -> x = y
+  | LChar c, VChar d -> c = d
+  | LString s, VString t -> s = t
+  | _ -> false
+
+
+and bind_list l1 l2 env =
+  if List.length l1 <> List.length l2 then
+    failwith "Problème"
+  else
+    List.fold_left2 (fun e p v -> bind_pattern p v e) env l1 l2
+
+
+and try_first_match p v env =
+  let rec aux = function
+    | [] -> failwith "pas de match"
+    | p :: rest ->
+        try bind_pattern p v env
+        with Failure _ -> aux rest
+  in
+  aux p
+
+
 
 and ifThenElse env mem v t f =
   match value_as_bool v with
