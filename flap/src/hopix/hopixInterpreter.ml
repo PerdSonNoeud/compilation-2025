@@ -378,6 +378,10 @@ and expression _ environment memory = function
     let (v, _) = expression' environment memory c in
     ifThenElse environment memory v t f
 
+  | Case (e, b) ->
+    let (v, _) = expression' environment memory e in
+    case environment memory v b
+
   | Tuple es ->
     let rec eval_all env mem = function
         | [] -> ([], mem)
@@ -494,22 +498,19 @@ and apply env mem e1 e2 =
 
 and bind_pattern p v env =
   match p.value, v with
-
   | PVariable id, _ -> Environment.bind env id.value v
 
   | PWildcard, _ -> env
 
-  | PTypeAnnotation (p, _), _ ->
-      bind_pattern p v env
+  | PTypeAnnotation (p, _), _ -> bind_pattern p v env
 
   | PLiteral lit, _ when literal_matches lit.value v -> env
   | PLiteral _, _ -> failwith "problème"
 
-  | PTuple t1, VTuple t2 ->
-      bind_list t1 t2 env
+  | PTuple t1, VTuple t2 -> bind_list t1 t2 env
 
   | PTaggedValue (constr, _, p1), VTagged (constr', p2)
-    when Position.value constr = constr' -> bind_list p1 p2 env
+    when constr.value = constr' -> bind_list p1 p2 env
 
   | PRecord (fields, _), VRecord vals ->
       List.fold_left (fun e (lbl, p) ->
@@ -520,15 +521,11 @@ and bind_pattern p v env =
         in
         bind_pattern p v_field e
       ) env fields
+  | POr ou, _ -> try_first_match ou v env
 
-  | POr ou, _ ->
-      try_first_match ou v env
+  | PAnd et, _ -> List.fold_left (fun e p -> bind_pattern p v e) env et
 
-  | PAnd et, _ ->
-      List.fold_left (fun e p -> bind_pattern p v e) env et
-
-  | _ ->
-      failwith "Pattern matching failure"
+  | _ -> failwith "Pattern matching failure"
 
 and literal_matches lit v =
   match lit, v with
@@ -556,6 +553,28 @@ and ifThenElse env mem v t f =
   match value_as_bool v with
   | true -> expression' env mem t
   | false -> expression' env mem f
+
+and case env mem v branches =
+  match branches with
+  | branch::next ->
+    begin
+      let Branch(p, expr) = branch.value in
+      try (
+        let new_env = bind_pattern p v env in
+        match p.value with
+        | PWildcard ->
+          expression' new_env mem expr
+        | PTaggedValue (con, _, cs) ->
+          let KId(c) = con.value in
+          begin
+            match value_as_tagged v with
+            | Some (KId(s), vs) when c = s -> expression' new_env mem expr
+            | _ -> case env mem v next
+          end
+        | _ -> case env mem v next
+      ) with Failure _ -> case env mem v next
+    end
+  | [] -> failwith "pas de match"
 
 and read_value (v, mem) =
   match v with
