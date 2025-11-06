@@ -326,7 +326,7 @@ and definition runtime d =
 and value_definition vdef runtime =
   match vdef with
   | SimpleValue(pdef)    -> simp_val runtime pdef
-  | RecFunctions(fundef) -> rec_fun runtime fundef
+  | RecFunctions(fundef) -> rec_fun (rec_fun runtime fundef) fundef
 
 and simp_val runtime pdef =
   let env = runtime.environment in
@@ -337,16 +337,24 @@ and simp_val runtime pdef =
   { environment = new_env; memory = new_mem }
 
 and rec_fun runtime fundef =
-  let env = runtime.environment in
-  let mem = runtime.memory in
-  match fundef with
-  | h::t ->
-    let (id, _, FunctionDefinition(p, expr)) = h in
-    let v = VClosure(env, p, expr) in
-    let new_env = Environment.bind env id.value v in
-
-    rec_fun { environment = new_env; memory = mem } t
-  | []   -> runtime
+  List.fold_left
+    (fun rt (id, _, FunctionDefinition (p, expr)) ->
+       let env = rt.environment in
+       let mem = rt.memory in
+       let v = VClosure(env, p, expr) in
+       (* Try updating, fall back to binding *)
+       let new_env =
+         try
+           Environment.update id.position id.value env v;
+           env
+         with
+         | Environment.UnboundIdentifier _ ->
+             Environment.bind env id.value v
+       in
+       { environment = new_env; memory = mem }
+    )
+    runtime
+    fundef
 
 and expression' environment memory e =
   expression (position e) environment memory (value e)
@@ -474,8 +482,6 @@ and for_rec env mem n1 n2 e3 i last_return =
 
         | _ ->  failwith "erreur"
 
-
-
 and literal pos memory =
   match pos.value with
   | LInt(x) -> (VInt x, memory)
@@ -483,12 +489,12 @@ and literal pos memory =
   | LString(x) -> (VString x, memory)
 
 and apply env mem e1 e2 =
-  let (v1, mem1) = expression' env mem e1 in
-  let (v2, mem2) = expression' env mem1 e2 in
+  let (v1, _) = expression' env mem e1 in
+  let (v2, _) = expression' env mem e2 in
   match v1 with
   | VClosure (env_, p, expr) ->
       let new_env = bind_pattern p v2 env_ in
-      expression' new_env mem2 expr
+      expression' new_env mem expr
 
   | VPrimitive (_, f) ->
       let v = f mem v2 in
@@ -542,7 +548,7 @@ and bind_list l1 l2 env =
 
 and try_first_match p v env =
   let rec aux = function
-    | [] -> failwith "pas de match"
+    | [] -> failwith "no match"
     | p :: rest ->
         try bind_pattern p v env
         with Failure _ -> aux rest
@@ -574,7 +580,7 @@ and case env mem v branches =
         | _ -> case env mem v next
       ) with Failure _ -> case env mem v next
     end
-  | [] -> failwith "pas de match"
+  | [] -> failwith "no matching case"
 
 and read_value (v, mem) =
   match v with
