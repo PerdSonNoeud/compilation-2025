@@ -524,18 +524,20 @@ and case env mem v branches =
   | branch::next ->
     begin
       let Branch(p, expr) = branch.value in
-      let new_env = bind_pattern p v env in
-      match p.value with
-      | PWildcard ->
-        expression' new_env mem expr
-      | PTaggedValue (con, _, cs) ->
-        let KId(c) = con.value in
-        begin
-          match value_as_tagged v with
-          | Some (KId(s), vs) when c = s -> expression' new_env mem expr
-          | _ -> case env mem v next
-        end
-      | _ -> case env mem v next
+      try (
+        let new_env = bind_pattern p v env in
+        match p.value with
+        | PWildcard ->
+          expression' new_env mem expr
+        | PTaggedValue (con, _, cs) ->
+          let KId(c) = con.value in
+          begin
+            match value_as_tagged v with
+            | Some (KId(s), vs) when c = s -> expression' new_env mem expr
+            | _ -> case env mem v next
+          end
+        | _ -> case env mem v next
+      ) with Failure _ -> case env mem v next
     end
   | [] -> failwith "pas de match"
 
