@@ -430,7 +430,16 @@ and expression _ environment memory = function
           eval_seq env mem1 xs
     in eval_seq environment memory expr
 
-  | _ -> failwith "Students! This is your job!"
+  (*il faut les ref pour tester peut être que le while marche pas'*)
+  | While(e1,e2) -> print_endline "test";
+    let (v,mem) = expression' environment memory e1 in 
+        begin match value_as_bool v with
+            | false -> (VUnit,memory)
+            | true -> let (_,m') = expression' environment memory e2 
+                in let e = { value = While(e1,e2); position = e1.position } in expression' environment m' e
+        end
+
+  | _ -> failwith "Students! This is your job!___"
 
 and literal pos memory =
   match pos.value with
