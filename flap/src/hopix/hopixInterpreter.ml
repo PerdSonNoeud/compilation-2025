@@ -427,15 +427,37 @@ and expression _ environment memory = function
     in eval_seq environment memory expr
 
   (*il faut les ref pour tester peut être que le while marche pas'*)
-  | While(e1,e2) -> print_endline "test";
-    let (v,mem) = expression' environment memory e1 in 
+  | While(e1,e2) -> 
+    let rec aux env mem e1 e2 last_return =
+        let (v,_) = expression' environment mem e1 in 
         begin match value_as_bool v with
-            | false -> (VUnit,memory)
-            | true -> let (_,m') = expression' environment memory e2 
-                in let e = { value = While(e1,e2); position = e1.position } in expression' environment m' e
+            | false -> (last_return,mem)
+            | true -> let (v',m') = expression' env mem e2 in aux env m' e1 e2 v'
         end
+    in aux environment memory e1 e2 VUnit
+
+
+  | For(i,e1,e2,e3) -> 
+        let (n1,_) = expression' environment memory e1 in 
+        let (n2,_) = expression' environment memory e2 in 
+        for_rec environment memory n1 n2 e3 i VUnit 
+
 
   | _ -> failwith "Students! This is your job!___"
+
+
+and for_rec env mem n1 n2 e3 i last_return = 
+    match n1, n2 with
+        | VInt x1, VInt x2 -> 
+            if (Mint.to_int x1) <= (Mint.to_int x2) then
+                let new_env = Environment.bind env (Position.value i) n1 in 
+                let (n3,m3) = expression' new_env mem e3 in 
+                for_rec new_env m3 (VInt(Mint.add x1 (Mint.of_int 1))) n2 e3 i n3
+            else (last_return,mem)
+
+        | _ ->  failwith "erreur"
+
+
 
 and literal pos memory =
   match pos.value with
