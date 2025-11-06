@@ -443,7 +443,20 @@ and expression _ environment memory = function
         for_rec environment memory n1 n2 e3 i VUnit 
 
 
-  | _ -> failwith "Students! This is your job!___"
+  | Ref (e) ->
+    let (v, mem) = expression' environment memory e in
+    let a = Memory.allocate memory (Mint.one) v in
+    (VLocation(a), mem)
+
+  | Assign (e1, e2) ->
+    let (v1, _) = expression' environment memory e1 in
+    let (v2, _) = expression' environment memory e2 in
+    assign_value memory v1 v2
+
+  | Read (e) ->
+    read_value (expression' environment memory e)
+
+  | _ -> failwith "Students! This is your job!"
 
 
 and for_rec env mem n1 n2 e3 i last_return = 
@@ -524,13 +537,11 @@ and literal_matches lit v =
   | LString s, VString t -> s = t
   | _ -> false
 
-
 and bind_list l1 l2 env =
   if List.length l1 <> List.length l2 then
     failwith "Problème"
   else
     List.fold_left2 (fun e p v -> bind_pattern p v e) env l1 l2
-
 
 and try_first_match p v env =
   let rec aux = function
@@ -541,12 +552,25 @@ and try_first_match p v env =
   in
   aux p
 
-
-
 and ifThenElse env mem v t f =
   match value_as_bool v with
   | true -> expression' env mem t
   | false -> expression' env mem f
+
+and read_value (v, mem) =
+  match v with
+  | VLocation(loc) ->
+    let block = Memory.dereference mem loc in
+    (Memory.read block (Mint.zero), mem)
+  | _ -> failwith "wrong typing"
+
+and assign_value mem v1 v2 =
+  match v1 with
+  | VLocation(loc) ->
+    let block = Memory.dereference mem loc in
+    Memory.write block (Mint.zero) v2;
+    (VUnit, mem)
+  | _ -> failwith "wrong typing"
 
 (** This function returns the difference between two runtimes. *)
 and extract_observable runtime runtime' =
