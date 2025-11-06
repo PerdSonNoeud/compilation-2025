@@ -341,11 +341,11 @@ and rec_fun runtime fundef =
   let mem = runtime.memory in
   match fundef with
   | h::t ->
-      let (id, _, a) = h in
-      let FunctionDefinition(_, expr) = a in
-      let (v, new_mem) = expression' env mem expr in
-      let new_env = Environment.bind env id.value v in
-      rec_fun { environment = new_env; memory = new_mem } t
+    let (id, _, FunctionDefinition(p, expr)) = h in
+    let v = VClosure(env, p, expr) in
+    let new_env = Environment.bind env id.value v in
+
+    rec_fun { environment = new_env; memory = mem } t
   | []   -> runtime
 
 and expression' environment memory e =
@@ -456,12 +456,6 @@ and apply env mem e1 e2 =
       (v, mem)
 
   | _ -> failwith "problème"
-
-
-and pattern p =
-  match p with
-  | PVariable (id) -> id.value
-  | _ -> failwith "jsp"
 
 and bind_pattern p v env =
   match p.value, v with
