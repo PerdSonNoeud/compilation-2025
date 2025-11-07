@@ -438,7 +438,6 @@ and expression _ environment memory = function
           eval_seq env mem1 xs
     in eval_seq environment memory expr
 
-  (*il faut les ref pour tester peut être que le while marche pas'*)
   | While(e1,e2) -> 
     let rec aux env mem e1 e2 last_return =
         let (v,_) = expression' environment mem e1 in 
