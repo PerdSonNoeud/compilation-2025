@@ -467,7 +467,7 @@ and expression _ environment memory = function
   | Read (e) ->
     read_value (expression' environment memory e)
 
-  | _ -> failwith "Students! This is your job!"
+  | _ -> failwith "Expression inconnue"
 
 
 and for_rec env mem n1 n2 e3 i last_return = 
@@ -479,7 +479,7 @@ and for_rec env mem n1 n2 e3 i last_return =
                 for_rec new_env m3 (VInt(Mint.add x1 (Mint.of_int 1))) n2 e3 i n3
             else (last_return,mem)
 
-        | _ ->  failwith "erreur"
+        | _ ->  failwith "Les bornes d'une boucle doivent être des entiers"
 
 and literal pos memory =
   match pos.value with
@@ -499,7 +499,7 @@ and apply env mem e1 e2 =
       let v = f mem v2 in
       (v, mem)
 
-  | _ -> failwith "problème"
+  | _ -> failwith "Application d'une valeur non fonctionnelle"
 
 and bind_pattern p v env =
   match p.value, v with
@@ -510,7 +510,7 @@ and bind_pattern p v env =
   | PTypeAnnotation (p, _), _ -> bind_pattern p v env
 
   | PLiteral lit, _ when literal_matches lit.value v -> env
-  | PLiteral _, _ -> failwith "problème"
+  | PLiteral _, _ -> failwith "Echec du motif littéral"
 
   | PTuple t1, VTuple t2 -> bind_list t1 t2 env
 
@@ -522,7 +522,7 @@ and bind_pattern p v env =
         let lbl = Position.value lbl in
         let v_field =
           try List.assoc lbl vals with Not_found ->
-            failwith "problème"
+            failwith ("champ absent du record")
         in
         bind_pattern p v_field e
       ) env fields
@@ -541,7 +541,7 @@ and literal_matches lit v =
 
 and bind_list l1 l2 env =
   if List.length l1 <> List.length l2 then
-    failwith "Problème"
+    failwith "Le nombre d'éléments ne correspond pas dans le motif tuple'"
   else
     List.fold_left2 (fun e p v -> bind_pattern p v e) env l1 l2
 
