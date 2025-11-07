@@ -319,7 +319,42 @@ let rec evaluate runtime ast =
 
 *)
 and definition runtime d =
-failwith "Students! This is your job!"
+  match d.value with
+  | DefineValue(vdef) -> value_definition vdef runtime
+  | _                 -> runtime
+
+and value_definition vdef runtime =
+  match vdef with
+  | SimpleValue(pdef)    -> simp_val runtime pdef
+  | RecFunctions(fundef) -> rec_fun (rec_fun runtime fundef) fundef
+
+and simp_val runtime pdef =
+  let env = runtime.environment in
+  let mem = runtime.memory in
+  let (id, _, expr) = pdef in
+  let (v, new_mem) = expression' env mem expr in
+  let new_env = Environment.bind env id.value v in
+  { environment = new_env; memory = new_mem }
+
+and rec_fun runtime fundef =
+  List.fold_left
+    (fun rt (id, _, FunctionDefinition (p, expr)) ->
+       let env = rt.environment in
+       let mem = rt.memory in
+       let v = VClosure(env, p, expr) in
+       (* Try updating, fall back to binding *)
+       let new_env =
+         try
+           Environment.update id.position id.value env v;
+           env
+         with
+         | Environment.UnboundIdentifier _ ->
+             Environment.bind env id.value v
+       in
+       { environment = new_env; memory = mem }
+    )
+    runtime
+    fundef
 
 and expression' environment memory e =
   expression (position e) environment memory (value e)
@@ -330,8 +365,253 @@ and expression' environment memory e =
 
    and E = [runtime.environment], M = [runtime.memory].
 *)
-and expression _ environment memory =
-failwith "Students! This is your job!"
+and expression _ environment memory = function
+  | Literal (pos)  -> literal pos memory
+
+  | Variable (id, _) ->
+    let v = Environment.lookup id.position id.value environment in
+    (v, memory)
+
+  | Apply (e1, e2) ->
+    apply environment memory e1 e2
+
+  | Define (vd, e) ->
+    let runtime = value_definition vd { environment; memory } in
+    expression' runtime.environment runtime.memory e
+
+  | Fun(FunctionDefinition(p, expr)) ->
+    (VClosure (environment, p, expr), memory)
+
+  | IfThenElse (c, t, f) ->
+    let (v, _) = expression' environment memory c in
+    ifThenElse environment memory v t f
+
+  | Case (e, b) ->
+    let (v, _) = expression' environment memory e in
+    case environment memory v b
+
+  | Tuple es ->
+    let rec eval_all env mem = function
+        | [] -> ([], mem)
+        | e :: xs ->
+            let (v, mem1) = expression e.position env mem e.value in
+            let (vs, mem2) = eval_all env mem1 xs in
+                (v :: vs, mem2)
+    in let (vs, mem') = eval_all environment memory es in
+        (VTuple vs, mem')
+
+  | Tagged (constructor, _, exprs) ->
+        let rec eval_list env mem = function
+            | [] -> ([], mem)
+            | e :: xs ->
+                let (v, mem1) = expression' env mem e in
+                    let (vs, mem2) = eval_list env mem1 xs in
+                        (v :: vs, mem2)
+        in let (values, mem') = eval_list environment memory exprs in
+            (VTagged (Position.value constructor, values), mem')
+
+  | Record (fields, _) ->
+    let rec eval_fields env mem = function
+      | [] -> ([], mem)
+      | (label, expr) :: xs ->
+          let (v, mem1) = expression' env mem expr in
+          let (vs, mem2) = eval_fields env mem1 xs in
+            ((Position.value label, v) :: vs, mem2)
+    in let (evaluated_fields, mem') = eval_fields environment memory fields in
+    (VRecord evaluated_fields, mem')
+
+  | Field (e, label, _) ->
+    let (v, mem') = expression' environment memory e in
+    (match v with
+     | VRecord fields ->
+         let lbl = Position.value label in
+         (try let value = List.assoc lbl fields in (value, mem')
+          with Not_found -> failwith ("Field not found"))
+     | _ -> failwith "Field sur un non record")
+
+  | Sequence expr ->
+    let rec eval_seq env mem = function
+      | [] -> failwith "sequence vide"
+      | [last] -> expression' env mem last
+      | e :: xs ->
+          let (_, mem1) = expression' env mem e in
+          eval_seq env mem1 xs
+    in eval_seq environment memory expr
+
+  (*il faut les ref pour tester peut être que le while marche pas'*)
+  | While(e1,e2) -> 
+    let rec aux env mem e1 e2 last_return =
+        let (v,_) = expression' environment mem e1 in 
+        begin match value_as_bool v with
+            | false -> (last_return,mem)
+            | true -> let (v',m') = expression' env mem e2 in aux env m' e1 e2 v'
+        end
+    in aux environment memory e1 e2 VUnit
+
+
+  | For(i,e1,e2,e3) -> 
+        let (n1,_) = expression' environment memory e1 in 
+        let (n2,_) = expression' environment memory e2 in 
+        for_rec environment memory n1 n2 e3 i VUnit 
+
+
+  | Ref (e) ->
+    let (v, mem) = expression' environment memory e in
+    let a = Memory.allocate memory (Mint.one) v in
+    (VLocation(a), mem)
+
+  | Assign (e1, e2) ->
+    let (v1, _) = expression' environment memory e1 in
+    let (v2, _) = expression' environment memory e2 in
+    assign_value memory v1 v2
+
+  | Read (e) ->
+    read_value (expression' environment memory e)
+
+  | _ -> failwith "Students! This is your job!"
+
+
+and for_rec env mem n1 n2 e3 i last_return = 
+    match n1, n2 with
+        | VInt x1, VInt x2 -> 
+            if (Mint.to_int x1) <= (Mint.to_int x2) then
+                let new_env = Environment.bind env (Position.value i) n1 in 
+                let (n3,m3) = expression' new_env mem e3 in 
+                for_rec new_env m3 (VInt(Mint.add x1 (Mint.of_int 1))) n2 e3 i n3
+            else (last_return,mem)
+
+        | _ ->  failwith "erreur"
+
+and literal pos memory =
+  match pos.value with
+  | LInt(x) -> (VInt x, memory)
+  | LChar(x) -> (VChar x, memory)
+  | LString(x) -> (VString x, memory)
+
+and apply env mem e1 e2 =
+  let (v1, _) = expression' env mem e1 in
+  let (v2, _) = expression' env mem e2 in
+  match v1 with
+  | VClosure (env_, p, expr) ->
+      let new_env = bind_pattern p v2 env_ in
+      expression' new_env mem expr
+
+  | VPrimitive (_, f) ->
+      let v = f mem v2 in
+      (v, mem)
+
+  | _ -> failwith "problème"
+
+and bind_pattern p v env =
+  match p.value, v with
+  | PVariable id, _ -> Environment.bind env id.value v
+
+  | PWildcard, _ -> env
+
+  | PTypeAnnotation (p, _), _ -> bind_pattern p v env
+
+  | PLiteral lit, _ when literal_matches lit.value v -> env
+  | PLiteral _, _ -> failwith "problème"
+
+  | PTuple t1, VTuple t2 -> bind_list t1 t2 env
+
+  | PTaggedValue (constr, _, p1), VTagged (constr', p2)
+    when constr.value = constr' -> bind_list p1 p2 env
+
+  | PRecord (fields, _), VRecord vals ->
+      List.fold_left (fun e (lbl, p) ->
+        let lbl = Position.value lbl in
+        let v_field =
+          try List.assoc lbl vals with Not_found ->
+            failwith "problème"
+        in
+        bind_pattern p v_field e
+      ) env fields
+  | POr ou, _ -> try_first_match ou v env
+
+  | PAnd et, _ -> List.fold_left (fun e p -> bind_pattern p v e) env et
+
+  | _ -> failwith "Pattern matching failure"
+
+and literal_matches lit v =
+  match lit, v with
+  | LInt x, VInt y -> x = y
+  | LChar c, VChar d -> c = d
+  | LString s, VString t -> s = t
+  | _ -> false
+
+and bind_list l1 l2 env =
+  if List.length l1 <> List.length l2 then
+    failwith "Problème"
+  else
+    List.fold_left2 (fun e p v -> bind_pattern p v e) env l1 l2
+
+and try_first_match p v env =
+  let rec aux = function
+    | [] -> failwith "no match"
+    | p :: rest ->
+        try bind_pattern p v env
+        with Failure _ -> aux rest
+  in
+  aux p
+
+and ifThenElse env mem v t f =
+  match value_as_bool v with
+  | true -> expression' env mem t
+  | false -> expression' env mem f
+
+
+and case env mem v branches =
+  match branches with
+  | branch :: next ->
+    let Branch(p, expr) = branch.value in
+    begin
+      match p.value with
+      | PWildcard ->
+        let new_env = bind_pattern p v env in
+        expression' new_env mem expr
+
+      | PTaggedValue (con, _, _) ->
+        begin
+          match value_as_tagged v with
+          | Some (KId(s), vs) ->
+            let KId(c) = con.value in
+            if c = s then
+              let new_env = bind_pattern p v env in
+              expression' new_env mem expr
+            else
+              case env mem v next
+          | None ->
+            case env mem v next
+        end
+
+      | _ ->
+        begin
+          try
+            let new_env = bind_pattern p v env in
+            expression' new_env mem expr
+          with Failure _ ->
+            case env mem v next
+        end
+    end
+
+  | [] -> failwith "no matching case"
+
+
+and read_value (v, mem) =
+  match v with
+  | VLocation(loc) ->
+    let block = Memory.dereference mem loc in
+    (Memory.read block (Mint.zero), mem)
+  | _ -> failwith "wrong typing"
+
+and assign_value mem v1 v2 =
+  match v1 with
+  | VLocation(loc) ->
+    let block = Memory.dereference mem loc in
+    Memory.write block (Mint.zero) v2;
+    (VUnit, mem)
+  | _ -> failwith "wrong typing"
 
 (** This function returns the difference between two runtimes. *)
 and extract_observable runtime runtime' =
