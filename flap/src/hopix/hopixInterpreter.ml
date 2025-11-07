@@ -560,27 +560,43 @@ and ifThenElse env mem v t f =
   | true -> expression' env mem t
   | false -> expression' env mem f
 
+
 and case env mem v branches =
   match branches with
-  | branch::next ->
+  | branch :: next ->
+    let Branch(p, expr) = branch.value in
     begin
-      let Branch(p, expr) = branch.value in
-      try (
+      match p.value with
+      | PWildcard ->
         let new_env = bind_pattern p v env in
-        match p.value with
-        | PWildcard ->
-          expression' new_env mem expr
-        | PTaggedValue (con, _, cs) ->
-          let KId(c) = con.value in
-          begin
-            match value_as_tagged v with
-            | Some (KId(s), vs) when c = s -> expression' new_env mem expr
-            | _ -> case env mem v next
-          end
-        | _ -> case env mem v next
-      ) with Failure _ -> case env mem v next
+        expression' new_env mem expr
+
+      | PTaggedValue (con, _, _) ->
+        begin
+          match value_as_tagged v with
+          | Some (KId(s), vs) ->
+            let KId(c) = con.value in
+            if c = s then
+              let new_env = bind_pattern p v env in
+              expression' new_env mem expr
+            else
+              case env mem v next
+          | None ->
+            case env mem v next
+        end
+
+      | _ ->
+        begin
+          try
+            let new_env = bind_pattern p v env in
+            expression' new_env mem expr
+          with Failure _ ->
+            case env mem v next
+        end
     end
+
   | [] -> failwith "no matching case"
+
 
 and read_value (v, mem) =
   match v with
