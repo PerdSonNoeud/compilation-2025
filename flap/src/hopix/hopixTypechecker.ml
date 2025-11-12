@@ -35,17 +35,19 @@ let check_type_scheme :
       HopixAST.type_scheme ->
       HopixTypes.aty_scheme * HopixTypes.typing_environment
   = fun env pos (ForallTy (ts, ty)) ->
-  failwith "Students! This is your job!"
+    let ts = List.map Position.value ts in
+    let new_env = HopixTypes.bind_type_variables pos env ts in
+    (Scheme(ts, HopixTypes.internalize_ty env ty), new_env)
 
 let synth_literal : HopixAST.literal -> HopixTypes.aty =
   fun l ->
   failwith "Students! This is your job!"
 
 let rec check_pattern :
-          HopixTypes.typing_environment ->
-          HopixAST.pattern Position.located ->
-          HopixTypes.aty ->
-          HopixTypes.typing_environment
+      HopixTypes.typing_environment ->
+      HopixAST.pattern Position.located ->
+      HopixTypes.aty ->
+      HopixTypes.typing_environment
   = fun env Position.({ value = p; position = pos; } as pat) expected ->
   failwith "Students! This is your job!"
 
@@ -76,7 +78,15 @@ and check_value_definition :
       HopixAST.value_definition ->
       HopixTypes.typing_environment
   = fun env def ->
-  failwith "Students! This is your job!"
+    match def with
+    | SimpleValue (id, Some ts, expr) ->
+      let (s, new_env) = check_type_scheme env ts.position ts.value in
+      let Scheme (vl, aty) = s in
+      check_expression new_env expr aty;
+      HopixTypes.bind_value id.value s new_env
+
+    | RecFunctions fs ->
+      failwith "Students! This is your job!"
 
 let check_definition env = function
   | DefineValue vdef ->
