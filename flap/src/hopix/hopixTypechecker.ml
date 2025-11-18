@@ -149,7 +149,6 @@ let rec synth_expression :
   | _ ->
     HopixTypes.type_error pos "synth_expression: cas non implémenté"
 
-
 and check_expression :
       HopixTypes.typing_environment ->
       HopixAST.expression Position.located ->
@@ -163,7 +162,7 @@ and check_expression :
 
   | _ ->
     let inferred = synth_expression env exp in
-    check_equal_types pos expected inferred
+    check_equal_types pos ~expected ~given:inferred
 
 and check_value_definition :
       HopixTypes.typing_environment ->
@@ -171,14 +170,34 @@ and check_value_definition :
       HopixTypes.typing_environment
   = fun env def ->
   match def with
-  | SimpleValue (id, Some ts, expr) ->
-    let (s, new_env) = check_type_scheme env ts.position ts.value in
-    let Scheme (vl, aty) = s in
-    check_expression new_env expr aty;
-    HopixTypes.bind_value id.value s new_env
+  | SimpleValue (id, ts, expr) ->
+    begin match ts with
+    | None    -> failwith "Missing type annotation"
+    | Some ts ->
+      let (s, new_env) = check_type_scheme env ts.position ts.value in
+      let Scheme (vl, aty) = s in
+      check_expression new_env expr aty;
+      HopixTypes.bind_value id.value s new_env
+    end
 
-  | RecFunctions fs ->
-    failwith "Students! This is your job!"
+  | RecFunctions recfun ->
+    check_rec_fun env recfun
+
+and check_rec_fun :
+      HopixTypes.typing_environment ->
+      HopixAST.function_definition HopixAST.polymorphic_definition list ->
+      HopixTypes.typing_environment
+  = fun env recfun ->
+  (* Create a new env with every id initialized *)
+  let new_env = List.fold_left (fun env (id, ts, fundef) ->
+    match ts with
+    | None -> failwith "a"
+    | Some (Position.{ value = e; position = pos; } as tys) ->
+      let (s, new_env) = check_type_scheme env pos e in
+      (* Marche pas je sais pas pk *)
+      HopixTypes.bind_value id.value s new_env
+  ) env recfun in
+  new_env
 
 let check_definition env = function
   | DefineValue vdef ->
