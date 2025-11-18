@@ -147,18 +147,8 @@ and check_expression :
       HopixTypes.aty ->
       unit
   = fun env (Position.{ value = e; position = pos; } as exp) expected ->
-  match e with
-  | Literal l ->
-      check_equal_types pos expected (synth_literal l.value)
-  | _ ->
-      let inferred = synth_expression env exp in
-      check_equal_types pos expected inferred
-
-
-and check_literal = function
-  | LInt _ -> HopixTypes.hint
-  | LChar _ -> HopixTypes.hchar
-  | LString _ -> HopixTypes.hstring
+  let inferred = synth_expression env exp in
+  check_equal_types pos expected inferred
 
 and check_value_definition :
       HopixTypes.typing_environment ->
