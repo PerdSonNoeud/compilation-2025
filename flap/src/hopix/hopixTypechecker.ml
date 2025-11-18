@@ -39,9 +39,30 @@ let check_type_scheme :
   let new_env = HopixTypes.bind_type_variables pos env ts in
   (Scheme(ts, HopixTypes.internalize_ty env ty), new_env)
 
+let expect_int pos aty =
+  if aty <> HopixTypes.hint then
+    HopixTypes.type_error pos
+      (Printf.sprintf "Attendu int, obtenu : %s" (HopixTypes.string_of_aty aty))
+
+let expect_bool pos aty =
+  if aty <> HopixTypes.hbool then
+    HopixTypes.type_error pos
+      (Printf.sprintf "Attendu bool, obtenu : %s" (HopixTypes.string_of_aty aty))
+
+
+let normalize_op_name s =
+  let len = String.length s in
+  if len >= 2 && s.[0] = '`' && s.[len - 1] = '`'
+  then String.sub s 1 (len - 2)
+  else s
+
 let synth_literal : HopixAST.literal -> HopixTypes.aty =
   fun l ->
-  failwith "Students! This is your job!"
+    match l with
+    | LInt _ -> HopixTypes.hint
+    | LChar _ -> HopixTypes.hchar
+    | LString _ -> HopixTypes.hstring
+
 
 let rec check_pattern :
       HopixTypes.typing_environment ->
@@ -58,12 +79,67 @@ and synth_pattern :
   = fun env Position.{ value = p; position = pos; } ->
   failwith "Students! This is your job!"
 
-let rec synth_expression :
-      HopixTypes.typing_environment ->
-      HopixAST.expression Position.located ->
-      HopixTypes.aty
-  = fun env Position.{ value = e; position = pos; } ->
-  failwith "Students! This is your job!"
+
+and synth_expression env Position.{ value = e; position = pos } =
+  match e with
+
+  | Literal l ->
+      synth_literal l.value
+
+  | Variable (id, _) ->
+      HopixTypes.type_error pos "Variable pas implémentée"
+
+  | Apply (f_loc, arg2_loc) ->
+      begin match f_loc.value with
+
+      | Apply (f2_loc, arg1_loc) ->
+          begin match f2_loc.value with
+          | Variable (id_op_loc, _) ->
+              let raw = match Position.value id_op_loc with Id s -> s in
+              let op = normalize_op_name raw in
+
+              let t1 = synth_expression env arg1_loc in
+              let t2 = synth_expression env arg2_loc in
+
+              if List.mem op ["+";"-";"*";"/";"%"] then (
+                check_equal_types pos ~expected:HopixTypes.hint ~given:t1;
+                check_equal_types pos ~expected:HopixTypes.hint ~given:t2;
+                HopixTypes.hint
+              )
+
+              else if List.mem op ["=";"<>";"<";">";"<=";">="] then (
+                check_equal_types pos ~expected:HopixTypes.hint ~given:t1;
+                check_equal_types pos ~expected:HopixTypes.hint ~given:t2;
+                HopixTypes.hbool
+              )
+
+              else
+                HopixTypes.type_error pos
+                  (Printf.sprintf "Unknown operator '%s'" raw)
+
+          | _ ->
+              HopixTypes.type_error pos "Application non gérée"
+          end
+
+      | Variable (id_loc, _) ->
+          let raw = match Position.value id_loc with Id s -> s in
+          let op = normalize_op_name raw in
+          if op = "-" then
+            let t = synth_expression env arg2_loc in
+            check_equal_types pos ~expected:HopixTypes.hint ~given:t;
+            HopixTypes.hint
+          else
+            HopixTypes.type_error pos
+              (Printf.sprintf "Application non-implémentée pour '%s'" raw)
+
+      | _ ->
+          HopixTypes.type_error pos
+            "Application complexe non gérée"
+      end
+
+  | _ ->
+      HopixTypes.type_error pos "synth_expression: cas non implémenté"
+
 
 and check_expression :
       HopixTypes.typing_environment ->
@@ -72,8 +148,12 @@ and check_expression :
       unit
   = fun env (Position.{ value = e; position = pos; } as exp) expected ->
   match e with
-  | Literal (l) -> check_equal_types pos expected (check_literal l.value)
-  | _ -> failwith "Students! This is you job!"
+  | Literal l ->
+      check_equal_types pos expected (synth_literal l.value)
+  | _ ->
+      let inferred = synth_expression env exp in
+      check_equal_types pos expected inferred
+
 
 and check_literal = function
   | LInt _ -> HopixTypes.hint
