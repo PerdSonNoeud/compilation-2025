@@ -222,8 +222,8 @@ and check_rec_fun :
     (* we need the type of the param of the function,
        using hprod to flatten the list. *)
     let in_aty = match in_ts with
-    | many  -> HopixTypes.hprod many
     | [one] -> one
+    | many  -> HopixTypes.hprod many
     in
     (* Check if the patterns are correct for the input *)
     let param_env = check_pattern fun_env p in_aty in
