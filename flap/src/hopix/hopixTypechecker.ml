@@ -136,7 +136,7 @@ match e with
             (* instanciation polymorphe fraîche *)
             let HopixTypes.Scheme (params, _) = scheme in
             let fresh_args =
-              List.map (fun _ -> HopixTypes.ATyVar (HopixTypes.fresh ())) params
+              List.map (fun _ -> HopixTypes.ATyVar (TId "_a")) params (*TODO tempo à modif *)
             in
             HopixTypes.instantiate_type_scheme scheme fresh_args
 
