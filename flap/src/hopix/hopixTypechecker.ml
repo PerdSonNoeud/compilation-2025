@@ -188,16 +188,51 @@ and check_rec_fun :
       HopixAST.function_definition HopixAST.polymorphic_definition list ->
       HopixTypes.typing_environment
   = fun env recfun ->
-  (* Create a new env with every id initialized *)
-  let new_env = List.fold_left (fun env (id, ts, fundef) ->
+  (* Create a new env with every id initialized and an acc with its linked scheme *)
+  let (pairs, new_env) = List.fold_left (fun (acc, env) (id, ts, fundef) ->
     match ts with
     | None -> failwith "a"
     | Some (Position.{ value = e; position = pos; } as tys) ->
       let (s, new_env) = check_type_scheme env pos e in
-      (* Marche pas je sais pas pk *)
-      HopixTypes.bind_value id.value s new_env
-  ) env recfun in
-  new_env
+      ((id, s)::acc, new_env)
+  ) ([], env) recfun in
+
+  (* Reverse the list of pairs to get them in the right order *)
+  let pairs = List.rev pairs in
+
+  (* Bind every pairs together *)
+  let fun_env = List.fold_left (fun env (id, s) ->
+    HopixTypes.bind_value (Position.value id) s env
+  ) new_env pairs in
+
+  (* Iter on each pairs with the new binded env with each function *)
+  List.iter (fun (id, s) ->
+    let HopixTypes.Scheme(_, aty) = s in
+    (* Separate args type and return value type *)
+    let (in_ts, out_ty) =
+      HopixTypes.destruct_function_type_maximally (Position.position id) aty
+    in
+    (* Find the corresponding function *)
+    let (_, _, fundef) =
+      try List.find (fun (id2, _, _) -> id2 = id) recfun
+      with Not_found -> (* Supposedly will never happen *)
+        failwith "Internal error: function definition not found"
+    in
+    let FunctionDefinition(p, expr) = fundef in
+    (* we need the type of the param of the function,
+       using hprod to flatten the list. *)
+    let in_aty = match in_ts with
+    | many  -> HopixTypes.hprod many
+    | [one] -> one
+    in
+    (* Check if the patterns are correct for the input *)
+    let param_env = check_pattern fun_env p in_aty in
+    (* Same for the expression with the output *)
+    check_expression param_env expr out_ty
+  ) pairs;
+  (* Return the env with the function, we don't need the
+     env with the content of the functions *)
+  fun_env
 
 let check_definition env = function
   | DefineValue vdef ->
