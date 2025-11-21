@@ -163,8 +163,8 @@ and synth_pattern :
   | PLiteral lit ->
     (synth_literal lit.value, env)
 
-  | PTypeAnnotation (p_inner, ty_loc) ->
-    let ty = HopixTypes.internalize_ty env ty_loc in
+  | PTypeAnnotation (p_inner, ty) ->
+    let ty = HopixTypes.internalize_ty env ty in
     let env' = check_pattern env p_inner ty in
     (ty, env')
 
@@ -185,8 +185,8 @@ and synth_pattern :
       | None ->
         let fresh_args = List.map (fun _ -> HopixTypes.ATyVar (TId "_a")) params in
         HopixTypes.instantiate_type_scheme (Scheme(params, aty)) fresh_args
-      | Some ty_locs ->
-        let given = List.map (fun tloc -> HopixTypes.internalize_ty env tloc) ty_locs in
+      | Some ty ->
+        let given = List.map (fun t -> HopixTypes.internalize_ty env t) ty in
         HopixTypes.instantiate_type_scheme (Scheme(params, aty)) given
     in
     let arg_tys, _res = HopixTypes.destruct_function_type_maximally pos aty_inst in
@@ -248,11 +248,11 @@ match e with
           HopixTypes.lookup_type_scheme_of_identifier pos id.value env
         in
         match tyargs_opt with
-        | Some ty_locs ->
+        | Some ty ->
             let given =
-              List.map (fun tloc ->
-                HopixTypes.internalize_ty env tloc
-              ) ty_locs
+              List.map (fun t ->
+                HopixTypes.internalize_ty env t
+              ) ty
             in
             HopixTypes.instantiate_type_scheme scheme given
 
@@ -268,15 +268,15 @@ match e with
         HopixTypes.type_error p (Printf.sprintf "Unbound identifier `%s'." raw)
     end
 
-  | Apply (f_loc, arg_loc) ->
-    begin match f_loc.value with
-    | Apply (f2_loc, arg1_loc) ->
-        begin match f2_loc.value with
-        | Variable (id_op_loc, _) ->
-            let raw = match Position.value id_op_loc with Id s -> s in
+  | Apply (f, arg) ->
+    begin match f.value with
+    | Apply (f2, arg1) ->
+        begin match f2.value with
+        | Variable (id_op, _) ->
+            let raw = match Position.value id_op with Id s -> s in
             let op = normalize_op_name raw in
-            let t1 = synth_expression env arg1_loc in
-            let t2 = synth_expression env arg_loc in
+            let t1 = synth_expression env arg1 in
+            let t2 = synth_expression env arg in
 
             if List.mem op ["+";"-";"*";"/";"%"] then (
               check_equal_types pos ~expected:HopixTypes.hint ~given:t1;
@@ -300,37 +300,37 @@ HopixTypes.type_error pos
         | _ -> HopixTypes.type_error pos "Application non gérée"
         end
 
-    | Variable (id_loc, _) ->
-        let raw = match Position.value id_loc with Id s -> s in
+    | Variable (id, _) ->
+        let raw = match Position.value id with Id s -> s in
         let op = normalize_op_name raw in
         if op = "-" then
-          let t = synth_expression env arg_loc in
+          let t = synth_expression env arg in
           check_equal_types pos ~expected:HopixTypes.hint ~given:t;
           HopixTypes.hint
         else
 
-          let fty = synth_expression env f_loc in
+          let fty = synth_expression env f in
           let (dom, cod) = HopixTypes.destruct_function_type pos fty in
-          check_expression env arg_loc dom;
+          check_expression env arg dom;
           cod
 
     | _ ->
 
-        let fty = synth_expression env f_loc in
+        let fty = synth_expression env f in
         let (dom, cod) = HopixTypes.destruct_function_type pos fty in
-        check_expression env arg_loc dom;
+        check_expression env arg dom;
         cod
     end
 
-    | Case (scrutinee_loc, branches_locs) ->
-    let t_scrut = synth_expression env scrutinee_loc in
-    (match branches_locs with
+    | Case (scrutinee, branches) ->
+    let t_scrut = synth_expression env scrutinee in
+    (match branches with
      | [] -> HopixTypes.type_error pos "Match sans branches"
-     | (Position.{ value = Branch (pat_loc, expr_loc); position = bpos }) :: rest ->
+     | (Position.{ value = Branch (pat, expr); position = bpos }) :: rest ->
        (* première branche *)
-       let (pat_ty0, env_pat0) = synth_pattern env pat_loc in
-       check_equal_types (Position.position pat_loc) ~expected:t_scrut ~given:pat_ty0;
-       let ty_branch0 = synth_expression env_pat0 expr_loc in
+       let (pat_ty0, env_pat0) = synth_pattern env pat in
+       check_equal_types (Position.position pat) ~expected:t_scrut ~given:pat_ty0;
+       let ty_branch0 = synth_expression env_pat0 expr in
        (* autres branches  *)
        List.iter (fun (Position.{ value = Branch (pat_i, expr_i); position = bpos_i }) ->
          let (pat_tyi, env_pati) = synth_pattern env pat_i in
@@ -341,6 +341,11 @@ HopixTypes.type_error pos
        ) rest;
        ty_branch0
     )
+
+    | Fun (FunctionDefinition (pat, expr)) ->
+      let (domain_ty, param_env) = synth_pattern env pat in
+      let codomain_ty = synth_expression param_env expr in
+      HopixTypes.ATyArrow (domain_ty, codomain_ty)
 
   | _ ->
     HopixTypes.type_error pos "synth_expression: cas non implémenté"
