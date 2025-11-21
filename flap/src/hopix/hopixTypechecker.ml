@@ -381,54 +381,48 @@ and check_value_definition :
     check_rec_fun env recfun
 
 and check_rec_fun :
-      HopixTypes.typing_environment ->
-      HopixAST.function_definition HopixAST.polymorphic_definition list ->
-      HopixTypes.typing_environment
+    HopixTypes.typing_environment ->
+    HopixAST.function_definition HopixAST.polymorphic_definition list ->
+    HopixTypes.typing_environment
   = fun env recfun ->
-  (* Create a new env with every id initialized and an acc with its linked scheme *)
-  let (pairs, new_env) = List.fold_left (fun (acc, env_acc) (id, ts, fundef) ->
-    match ts with
-    | None -> failwith "a"
-    | Some (Position.{ value = e; position = pos; } as tys) ->
-      let (s, new_env_) = check_type_scheme env_acc pos e in
-      ((id, s)::acc, new_env_)
-  ) ([], env) recfun in
 
-  (* Reverse the list of pairs to get them in the right order *)
-  let pairs = List.rev pairs in
+  (* collect scheme *)
+  let triplets =
+    List.map (fun (id, ts, fundef) ->
+      match ts with
+      | None -> failwith "Type annotation is missing for recursive function"
+      | Some (Position.{ value = e; position = pos; } as tys) ->
+          let (s, local_ty_env) = check_type_scheme env pos e in
+          (id, s, fundef, local_ty_env)
+    ) recfun
+  in
 
-  (* Bind every pairs together *)
-  let fun_env = List.fold_left (fun env_acc (id, s) ->
-    HopixTypes.bind_value (Position.value id) s env_acc
-  ) new_env pairs in
+  (* create env *)
+  let fun_env =
+    List.fold_left (fun env_acc (id, s, _, _) ->
+      HopixTypes.bind_value (Position.value id) s env_acc
+    ) env triplets
+  in
 
-  (* Iter on each pairs with the new binded env with each function *)
-  List.iter (fun (id, s) ->
+  (* verif function body *)
+  List.iter (fun (id, s, fundef, local_ty_env) ->
+    let check_env =
+      List.fold_left (fun env_acc (id_other, s_other, _, _) ->
+        HopixTypes.bind_value (Position.value id_other) s_other env_acc
+      ) local_ty_env triplets
+    in
     let HopixTypes.Scheme(_, aty) = s in
-    (* Separate args type and return value type *)
     let (in_ts, out_ty) =
       HopixTypes.destruct_function_type_maximally (Position.position id) aty
     in
-    (* Find the corresponding function *)
-    let (_, _, fundef) =
-      try List.find (fun (id2, _, _) -> id2 = id) recfun
-      with Not_found -> (* Supposedly will never happen *)
-        failwith "Internal error: function definition not found"
-    in
     let FunctionDefinition(p, expr) = fundef in
-    (* we need the type of the param of the function,
-       using hprod to flatten the list. *)
     let in_aty = match in_ts with
     | [one] -> one
     | many  -> HopixTypes.hprod many
     in
-    (* Check if the patterns are correct for the input *)
-    let param_env = check_pattern fun_env p in_aty in
-    (* Same for the expression with the output *)
+    let param_env = check_pattern check_env p in_aty in
     check_expression param_env expr out_ty
-  ) pairs;
-  (* Return the env with the function, we don't need the
-     env with the content of the functions *)
+  ) triplets;
   fun_env
 
 let check_definition env = function
