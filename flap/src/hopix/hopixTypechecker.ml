@@ -139,9 +139,9 @@ let rec synth_expression :
             in
             HopixTypes.instantiate_type_scheme scheme fresh_args
 
-      with HopixTypes.Unbound (p, _) ->
-        let Id raw = id.value in
-        HopixTypes.type_error p (Printf.sprintf "Unbound identifier `%s'." raw)
+      with HopixTypes.Unbound (p, binding) ->
+        HopixTypes.type_error p
+        (Printf.sprintf "Unbound %s." (HopixTypes.string_of_binding binding))
     end
 
   | Apply (e1, e2) ->
