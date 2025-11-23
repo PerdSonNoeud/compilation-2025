@@ -24,8 +24,54 @@ let check_equal_types pos ~expected ~given =
 
 let rec check_pattern_linearity
         : identifier list -> pattern Position.located -> identifier list
-  = fun vars Position.{ value; position; } ->
-  failwith "Students! This is your job!"
+  = fun vars Position.{ value = p; position = pos; } ->
+  let add_var vars id =
+    let name = Position.value id in
+    if List.mem name vars then
+      HopixTypes.type_error pos "Variable de pattern liée plusieurs fois"
+    else
+      name :: vars
+  in
+  match p with
+  | PWildcard -> vars
+
+  | PVariable id ->
+    add_var vars id
+
+  | PLiteral _ -> vars
+
+  | PTypeAnnotation (p, ty) ->
+    check_pattern_linearity vars p
+
+  | PTuple ps ->
+    List.fold_left check_pattern_linearity vars ps
+
+  | PTaggedValue (k, tyargs, ps) ->
+    List.fold_left check_pattern_linearity vars ps
+
+  | PRecord (fields, tyargs) ->
+    List.fold_left (fun acc (_, p) -> check_pattern_linearity acc p) vars fields
+
+  | PAnd ps ->
+
+    List.fold_left (fun acc p -> check_pattern_linearity acc p) vars ps
+
+  | POr ps ->
+    let extract_names p =
+      let names = check_pattern_linearity [] p in
+      List.rev names
+    in
+    let names_list = List.map extract_names ps in
+    (* all the lists should be the same *)
+    let first = match names_list with [] -> [] | h::_ -> h in
+    if List.exists (fun nl -> nl <> first) names_list then
+      HopixTypes.type_error pos "Branches d'un or-pattern lient des variables différentes";
+    List.iter (fun name ->
+      if List.mem name vars then
+        HopixTypes.type_error pos "Variable de pattern liée plusieurs fois (avec un OR)"
+    ) first;
+    List.rev_append first vars
+
 
 (** Type-checking code *)
 
@@ -102,8 +148,87 @@ and synth_pattern :
       HopixTypes.typing_environment ->
       HopixAST.pattern Position.located ->
       HopixTypes.aty * HopixTypes.typing_environment
-  = fun env Position.{ value = p; position = pos; } ->
-   failwith "Students! This is your job!"
+  = fun env (Position.{ value = p; position = pos; } as pat) ->
+   let _ = ignore (check_pattern_linearity [] pat) in
+
+  match p with
+  | PWildcard ->
+    (HopixTypes.ATyVar (TId "_a"), env)
+
+  | PVariable id ->
+    let ty = HopixTypes.ATyVar (TId "_a") in
+    let env' = HopixTypes.bind_value (Position.value id) (Scheme([], ty)) env in
+    (ty, env')
+
+  | PLiteral lit ->
+    (synth_literal lit.value, env)
+
+  | PTypeAnnotation (p_inner, ty) ->
+    let ty = HopixTypes.internalize_ty env ty in
+    let env' = check_pattern env p_inner ty in
+    (ty, env')
+
+  | PTuple ps ->
+    let (tys, env') =
+      List.fold_left (fun (acc_tys, acc_env) p_i ->
+        let (ty_i, env_i) = synth_pattern acc_env p_i in
+        (acc_tys @ [ty_i], env_i)
+      ) ([], env) ps
+    in
+    (HopixTypes.hprod tys, env')
+
+  | PTaggedValue (k, tyargs_opt, ps) ->
+    let k_ = Position.value k in
+    let Scheme (params, aty) = HopixTypes.lookup_type_scheme_of_constructor pos k_ env in
+    let aty_inst =
+      match tyargs_opt with
+      | None ->
+        let fresh_args = List.map (fun _ -> HopixTypes.ATyVar (TId "_a")) params in
+        HopixTypes.instantiate_type_scheme (Scheme(params, aty)) fresh_args
+      | Some ty ->
+        let given = List.map (fun t -> HopixTypes.internalize_ty env t) ty in
+        HopixTypes.instantiate_type_scheme (Scheme(params, aty)) given
+    in
+    let arg_tys, _res = HopixTypes.destruct_function_type_maximally pos aty_inst in
+    if List.length arg_tys <> List.length ps then
+      HopixTypes.type_error pos "Arity mismatch in tagged-value pattern (synth_pattern)";
+    let env' = List.fold_left2 (fun acc_env p_i arg_ty ->
+      check_pattern acc_env p_i arg_ty
+    ) env ps arg_tys in
+    (aty_inst, env')
+
+  | PRecord (fields, tyargs_opt) ->
+    let tys_in_order, env' =
+      List.fold_left (fun (acc_tys, acc_env) (_lbl, p_i) ->
+        let (ty_i, env_i) = synth_pattern acc_env p_i in
+        (acc_tys @ [ty_i], env_i)
+      ) ([], env) fields
+    in
+    (HopixTypes.hprod tys_in_order, env')
+
+  | POr ps ->
+     (match ps with
+      | [] -> HopixTypes.type_error pos "Or-pattern vide"
+      | p0::rest ->
+         let (ty0, env0) = synth_pattern env p0 in
+         
+         List.iter (fun p_i ->
+             let (ty_i, _env_i) = synth_pattern env p_i in
+             if ty_i <> ty0 then
+               HopixTypes.type_error pos "Les alternatives d'un or-pattern doivent avoir le même type";
+         ) rest;
+         (ty0, env0)
+     )
+
+  | PAnd ps ->
+    let (tys, env') =
+      List.fold_left (fun (acc_tys, acc_env) p_i ->
+        let (ty_i, env_i) = synth_pattern acc_env p_i in
+        (acc_tys @ [ty_i], env_i)
+      ) ([], env) ps
+    in
+    (HopixTypes.hprod tys, env')
+
 
 
 let rec synth_expression :
@@ -122,17 +247,15 @@ let rec synth_expression :
           HopixTypes.lookup_type_scheme_of_identifier pos id.value env
         in
         match tyargs_opt with
-        | Some ty_locs ->
-            (* instanciation explicite *)
+        | Some ty ->
             let given =
-              List.map (fun tloc ->
-                HopixTypes.internalize_ty env tloc
-              ) ty_locs
+              List.map (fun t ->
+                HopixTypes.internalize_ty env t
+              ) ty
             in
             HopixTypes.instantiate_type_scheme scheme given
 
         | None ->
-            (* instanciation polymorphe fraîche *)
             let HopixTypes.Scheme (params, _) = scheme in
             let fresh_args =
               List.map (fun _ -> HopixTypes.ATyVar (TId "_a")) params (*TODO tempo à modif *)
@@ -144,20 +267,84 @@ let rec synth_expression :
         (Printf.sprintf "Unbound %s." (HopixTypes.string_of_binding binding))
     end
 
-  | Apply (e1, e2) ->
-    let e1_aty = synth_expression env e1 in
-    begin match e1_aty with
-    | ATyArrow (t1, t2) ->
-      check_expression env e2 t1;
-      t2
+  | Apply (f, arg) ->
+    begin match f.value with
+    | Apply (f2, arg1) ->
+        begin match f2.value with
+        | Variable (id_op, _) ->
+            let raw = match Position.value id_op with Id s -> s in
+            let op = normalize_op_name raw in
+            let t1 = synth_expression env arg1 in
+            let t2 = synth_expression env arg in
+
+            if List.mem op ["+";"-";"*";"/";"%"] then (
+              check_equal_types pos ~expected:HopixTypes.hint ~given:t1;
+              check_equal_types pos ~expected:HopixTypes.hint ~given:t2;
+              HopixTypes.hint
+            )
+            else if List.mem op ["=";"<>";"<";">";"<=";">="] then (
+              check_equal_types pos ~expected:HopixTypes.hint ~given:t1;
+              check_equal_types pos ~expected:HopixTypes.hint ~given:t2;
+              HopixTypes.hbool
+            ) else
+              let t1_str = HopixTypes.string_of_aty t1 in
+HopixTypes.type_error pos
+  (Printf.sprintf
+     "This expression has type %s which should be a function type."
+     t1_str)
+
+
+
+(*"Unknown operator '%s'" raw)*)
+        | _ -> HopixTypes.type_error pos "Application non gérée"
+        end
+
+    | Variable (id, _) ->
+        let raw = match Position.value id with Id s -> s in
+        let op = normalize_op_name raw in
+        if op = "-" then
+          let t = synth_expression env arg in
+          check_equal_types pos ~expected:HopixTypes.hint ~given:t;
+          HopixTypes.hint
+        else
+
+          let fty = synth_expression env f in
+          let (dom, cod) = HopixTypes.destruct_function_type pos fty in
+          check_expression env arg dom;
+          cod
+
     | _ ->
-        HopixTypes.type_error (Position.position e1)
-        "This expression has type int which should be a function type."
+
+        let fty = synth_expression env f in
+        let (dom, cod) = HopixTypes.destruct_function_type pos fty in
+        check_expression env arg dom;
+        cod
     end
 
-  | Tuple el ->
-    let aty_list = List.map (fun e -> synth_expression env e) el in
-    ATyTuple aty_list
+    | Case (scrutinee, branches) ->
+    let t_scrut = synth_expression env scrutinee in
+    (match branches with
+     | [] -> HopixTypes.type_error pos "Match sans branches"
+     | (Position.{ value = Branch (pat, expr); position = bpos }) :: rest ->
+       (* première branche *)
+       let (pat_ty0, env_pat0) = synth_pattern env pat in
+       check_equal_types (Position.position pat) ~expected:t_scrut ~given:pat_ty0;
+       let ty_branch0 = synth_expression env_pat0 expr in
+       (* autres branches  *)
+       List.iter (fun (Position.{ value = Branch (pat_i, expr_i); position = bpos_i }) ->
+         let (pat_tyi, env_pati) = synth_pattern env pat_i in
+         check_equal_types (Position.position pat_i) ~expected:t_scrut ~given:pat_tyi;
+         let ty_br_i = synth_expression env_pati expr_i in
+         if ty_br_i <> ty_branch0 then
+           HopixTypes.type_error bpos_i "Types de branches incompatibles dans le match"
+       ) rest;
+       ty_branch0
+    )
+
+    | Fun (FunctionDefinition (pat, expr)) ->
+      let (domain_ty, param_env) = synth_pattern env pat in
+      let codomain_ty = synth_expression param_env expr in
+      HopixTypes.ATyArrow (domain_ty, codomain_ty)
 
   | _ ->
     HopixTypes.type_error pos "synth_expression: cas non implémenté"
@@ -198,54 +385,48 @@ and check_value_definition :
     check_rec_fun env recfun
 
 and check_rec_fun :
-      HopixTypes.typing_environment ->
-      HopixAST.function_definition HopixAST.polymorphic_definition list ->
-      HopixTypes.typing_environment
+    HopixTypes.typing_environment ->
+    HopixAST.function_definition HopixAST.polymorphic_definition list ->
+    HopixTypes.typing_environment
   = fun env recfun ->
-  (* Create a new env with every id initialized and an acc with its linked scheme *)
-  let (pairs, new_env) = List.fold_left (fun (acc, env_acc) (id, ts, fundef) ->
-    match ts with
-    | None -> failwith "a"
-    | Some (Position.{ value = e; position = pos; } as tys) ->
-      let (s, new_env_) = check_type_scheme env_acc pos e in
-      ((id, s)::acc, new_env_)
-  ) ([], env) recfun in
 
-  (* Reverse the list of pairs to get them in the right order *)
-  let pairs = List.rev pairs in
+  (* collect scheme *)
+  let triplets =
+    List.map (fun (id, ts, fundef) ->
+      match ts with
+      | None -> failwith "Type annotation is missing for recursive function"
+      | Some (Position.{ value = e; position = pos; } as tys) ->
+          let (s, local_ty_env) = check_type_scheme env pos e in
+          (id, s, fundef, local_ty_env)
+    ) recfun
+  in
 
-  (* Bind every pairs together *)
-  let fun_env = List.fold_left (fun env_acc (id, s) ->
-    HopixTypes.bind_value (Position.value id) s env_acc
-  ) new_env pairs in
+  (* create env *)
+  let fun_env =
+    List.fold_left (fun env_acc (id, s, _, _) ->
+      HopixTypes.bind_value (Position.value id) s env_acc
+    ) env triplets
+  in
 
-  (* Iter on each pairs with the new binded env with each function *)
-  List.iter (fun (id, s) ->
+  (* verif function body *)
+  List.iter (fun (id, s, fundef, local_ty_env) ->
+    let check_env =
+      List.fold_left (fun env_acc (id_other, s_other, _, _) ->
+        HopixTypes.bind_value (Position.value id_other) s_other env_acc
+      ) local_ty_env triplets
+    in
     let HopixTypes.Scheme(_, aty) = s in
-    (* Separate args type and return value type *)
     let (in_ts, out_ty) =
       HopixTypes.destruct_function_type_maximally (Position.position id) aty
     in
-    (* Find the corresponding function *)
-    let (_, _, fundef) =
-      try List.find (fun (id2, _, _) -> id2 = id) recfun
-      with Not_found -> (* Supposedly will never happen *)
-        failwith "Internal error: function definition not found"
-    in
     let FunctionDefinition(p, expr) = fundef in
-    (* we need the type of the param of the function,
-       using hprod to flatten the list. *)
     let in_aty = match in_ts with
     | [one] -> one
     | many  -> HopixTypes.hprod many
     in
-    (* Check if the patterns are correct for the input *)
-    let param_env = check_pattern fun_env p in_aty in
-    (* Same for the expression with the output *)
+    let param_env = check_pattern check_env p in_aty in
     check_expression param_env expr out_ty
-  ) pairs;
-  (* Return the env with the function, we don't need the
-     env with the content of the functions *)
+  ) triplets;
   fun_env
 
 let check_definition env = function
