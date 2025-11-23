@@ -267,59 +267,21 @@ let rec synth_expression :
         (Printf.sprintf "Unbound %s." (HopixTypes.string_of_binding binding))
     end
 
-  | Apply (f, arg) ->
-    begin match f.value with
-    | Apply (f2, arg1) ->
-        begin match f2.value with
-        | Variable (id_op, _) ->
-            let raw = match Position.value id_op with Id s -> s in
-            let op = normalize_op_name raw in
-            let t1 = synth_expression env arg1 in
-            let t2 = synth_expression env arg in
-
-            if List.mem op ["+";"-";"*";"/";"%"] then (
-              check_equal_types pos ~expected:HopixTypes.hint ~given:t1;
-              check_equal_types pos ~expected:HopixTypes.hint ~given:t2;
-              HopixTypes.hint
-            )
-            else if List.mem op ["=";"<>";"<";">";"<=";">="] then (
-              check_equal_types pos ~expected:HopixTypes.hint ~given:t1;
-              check_equal_types pos ~expected:HopixTypes.hint ~given:t2;
-              HopixTypes.hbool
-            ) else
-              let t1_str = HopixTypes.string_of_aty t1 in
-HopixTypes.type_error pos
-  (Printf.sprintf
-     "This expression has type %s which should be a function type."
-     t1_str)
-
-
-
-(*"Unknown operator '%s'" raw)*)
-        | _ -> HopixTypes.type_error pos "Application non gérée"
-        end
-
-    | Variable (id, _) ->
-        let raw = match Position.value id with Id s -> s in
-        let op = normalize_op_name raw in
-        if op = "-" then
-          let t = synth_expression env arg in
-          check_equal_types pos ~expected:HopixTypes.hint ~given:t;
-          HopixTypes.hint
-        else
-
-          let fty = synth_expression env f in
-          let (dom, cod) = HopixTypes.destruct_function_type pos fty in
-          check_expression env arg dom;
-          cod
-
+| Apply (e1, e2) ->
+    let e1_aty = synth_expression env e1 in
+    begin match e1_aty with
+    | ATyArrow (t1, t2) ->
+      check_expression env e2 t1;
+      t2
     | _ ->
-
-        let fty = synth_expression env f in
-        let (dom, cod) = HopixTypes.destruct_function_type pos fty in
-        check_expression env arg dom;
-        cod
+        HopixTypes.type_error (Position.position e1)
+        "This expression has type int which should be a function type."
     end
+
+  | Tuple el ->
+    let aty_list = List.map (fun e -> synth_expression env e) el in
+    ATyTuple aty_list
+
 
     | Case (scrutinee, branches) ->
     let t_scrut = synth_expression env scrutinee in
