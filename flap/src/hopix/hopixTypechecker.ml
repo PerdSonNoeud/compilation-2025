@@ -255,6 +255,9 @@ let rec synth_expression :
   | Record (labels, tyargs_opt) ->
     synth_record env labels tyargs_opt
 
+  | Field (e, label, ty_list) ->
+    synth_field env e label ty_list
+
   | _ ->
     HopixTypes.type_error pos "synth_expression: cas non implémenté"
 
@@ -345,10 +348,10 @@ and synth_case :
       ty_branch0
 
 and synth_record :
-  HopixTypes.typing_environment ->
-  (HopixAST.label Position.located * HopixAST.expression Position.located) list ->
-  HopixAST.ty Position.located list option ->
-  HopixTypes.aty
+      HopixTypes.typing_environment ->
+      (HopixAST.label Position.located * HopixAST.expression Position.located) list ->
+      HopixAST.ty Position.located list option ->
+      HopixTypes.aty
   = fun env labels tyargs_opt ->
   let (l, e) = List.hd labels in
   match tyargs_opt with
@@ -381,6 +384,55 @@ and check_record_expressions :
     let (_, aty) = HopixTypes.destruct_function_type (Position.position l) aty in
     check_expression env e aty
   ) labels
+
+and synth_field :
+      HopixTypes.typing_environment ->
+      HopixAST.expression Position.located ->
+      HopixAST.label Position.located ->
+      HopixAST.ty Position.located list option ->
+      HopixTypes.aty
+  = fun env e (Position.{value = l; position = pos} as label) ty_list ->
+  (* Get the type of the expression *)
+  let aty = synth_expression env e in
+  match aty with
+  | ATyCon (tc, aty_list) ->
+    let labels =
+      HopixTypes.lookup_fields_of_type_constructor (Position.position e) tc env
+    in
+    let l_ = HopixTypes.Label l in
+    (* Verifying that the label exists *)
+    if (not (List.mem l labels)) then
+      HopixTypes.type_error pos
+      (Printf.sprintf "Unbound %s." (HopixTypes.string_of_binding l_));
+    verify_field_types env e label aty_list ty_list
+
+  | _ ->
+    HopixTypes.type_error e.position "Ill-formed type: the expression should be a constructor."
+
+and verify_field_types :
+      HopixTypes.typing_environment ->
+      HopixAST.expression Position.located ->
+      HopixAST.label Position.located ->
+      HopixTypes.aty list ->
+      HopixAST.ty Position.located list option ->
+      HopixTypes.aty
+  = fun env e (Position.{value = l; position = pos} as label) expected tyargs_opt ->
+  let scheme = HopixTypes.lookup_type_scheme_of_label pos l env in
+  let Scheme (_, aty) = scheme in
+  match tyargs_opt with
+  | Some tyargs ->
+    (* Given aty list *)
+    let given = List.map (fun ty -> HopixTypes.internalize_ty env ty) tyargs in
+    (* Compare the provided type list to the type constructor type list *)
+    List.iter2 (fun expected given ->
+      check_equal_types (Position.position e) ~expected ~given
+    ) expected given;
+    let aty = HopixTypes.instantiate_type_scheme scheme given in
+    let (_, aty) = HopixTypes.destruct_function_type pos aty in
+    aty
+  | None ->
+    let (_, aty) = HopixTypes.destruct_function_type pos aty in
+    aty
 
 and check_value_definition :
       HopixTypes.typing_environment ->
