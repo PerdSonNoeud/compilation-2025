@@ -116,9 +116,9 @@ let rec check_pattern :
       check_equal_types pos ~expected ~given:ty_; check_pattern env p ty_
 
     | PTuple ps ->
-      let expected_tys = 
+      let expected_tys =
         match HopixTypes.destruct_product_type pos expected with
-        | [] -> []  
+        | [] -> []
         | tys -> tys
       in
       if List.length ps <> List.length expected_tys then
@@ -236,8 +236,7 @@ let rec synth_expression :
       HopixAST.expression Position.located ->
       HopixTypes.aty
   = fun env Position.{ value = e; position = pos; } ->
-match e with
-
+  match e with
   | Literal l ->
     synth_literal l.value
 
@@ -263,9 +262,9 @@ match e with
             in
             HopixTypes.instantiate_type_scheme scheme fresh_args
 
-      with HopixTypes.Unbound (p, _) ->
-        let Id raw = id.value in
-        HopixTypes.type_error p (Printf.sprintf "Unbound identifier `%s'." raw)
+      with HopixTypes.Unbound (p, binding) ->
+        HopixTypes.type_error p
+        (Printf.sprintf "Unbound %s." (HopixTypes.string_of_binding binding))
     end
 
   | Apply (f, arg) ->
