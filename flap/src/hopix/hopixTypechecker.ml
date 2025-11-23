@@ -252,6 +252,9 @@ let rec synth_expression :
     let codomain_ty = synth_expression param_env expr in
     HopixTypes.ATyArrow (domain_ty, codomain_ty)
 
+  | Record (labels, tyargs_opt) ->
+    synth_record env labels tyargs_opt
+
   | _ ->
     HopixTypes.type_error pos "synth_expression: cas non implémenté"
 
@@ -340,6 +343,44 @@ and synth_case :
           HopixTypes.type_error bpos_i "Types de branches incompatibles dans le match"
       ) rest;
       ty_branch0
+
+and synth_record :
+  HopixTypes.typing_environment ->
+  (HopixAST.label Position.located * HopixAST.expression Position.located) list ->
+  HopixAST.ty Position.located list option ->
+  HopixTypes.aty
+  = fun env labels tyargs_opt ->
+  let (l, e) = List.hd labels in
+  match tyargs_opt with
+  | Some tyargs ->
+    let (tc, _, ll) = HopixTypes.lookup_type_constructor_of_label l.position l.value env in
+    let aty_list = List.map (fun ty -> HopixTypes.internalize_ty env ty) tyargs in
+    List.iter (fun (l, _) ->
+      if (not (List.mem (Position.value l) ll)) then
+      HopixTypes.type_error l.position
+      "Ill-formed type: one or multiple elements of the record are missing."
+    ) labels;
+    check_record_expressions env labels aty_list;
+    ATyCon (tc, aty_list)
+
+  | None ->
+    HopixTypes.type_error e.position
+    "Ill-formed type: anotation of type required for a variable."
+
+and check_record_expressions :
+  HopixTypes.typing_environment ->
+  (HopixAST.label Position.located * HopixAST.expression Position.located) list ->
+  HopixTypes.aty list ->
+  unit
+  = fun env labels aty_list ->
+  List.iter (fun (l, e) ->
+    let scheme =
+      HopixTypes.lookup_type_scheme_of_label (Position.position l) (Position.value l) env
+    in
+    let aty = HopixTypes.instantiate_type_scheme scheme aty_list in
+    let (_, aty) = HopixTypes.destruct_function_type (Position.position l) aty in
+    check_expression env e aty
+  ) labels
 
 and check_value_definition :
       HopixTypes.typing_environment ->
