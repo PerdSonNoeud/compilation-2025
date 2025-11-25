@@ -137,7 +137,16 @@ let rec check_pattern :
         HopixTypes.type_error pos "Arity mismatch in tagged-value pattern";
       List.fold_left2 check_pattern env ps arg_types
 
-    | POr ps -> let envs = List.map (fun p -> check_pattern env p expected) ps in env
+    | POr ps ->
+    let env0 = check_pattern env (List.hd ps) expected in
+    List.iter (fun p ->
+      let envi = check_pattern env p expected in
+      if envi <> env0 then
+        HopixTypes.type_error pos
+          "Branches d'un or-pattern ne lient pas les mêmes variables"
+    ) (List.tl ps);
+    env0
+
 
     | PAnd ps -> List.fold_left (fun env p -> check_pattern env p expected) env ps
 
@@ -247,16 +256,28 @@ let rec synth_expression :
   | Case (expr, branches) ->
     synth_case pos env expr branches
 
-  | Fun (FunctionDefinition (pat, expr)) ->
+  | Fun (FunctionDefinition (pat, expr)) -> 
     let (domain_ty, param_env) = synth_pattern env pat in
-    let codomain_ty = synth_expression param_env expr in
-    HopixTypes.ATyArrow (domain_ty, codomain_ty)
+    let codomain_ty = synth_expression param_env expr in codomain_ty
 
   | Record (labels, tyargs_opt) ->
     synth_record env labels tyargs_opt
 
   | Field (e, label, ty_list) ->
     synth_field env e label ty_list
+   
+  | TypeAnnotation(e,ty) -> 
+    let e_aty = synth_expression env e in 
+    let aty = HopixTypes.internalize_ty env ty in begin
+    match aty with
+        | HopixTypes.ATyArrow (domain_ty, codomain_ty) ->
+            (check_equal_types pos ~expected:codomain_ty ~given:e_aty);
+            aty
+
+        |_ -> let s = Printf.sprintf "probleme "^ (HopixTypes.string_of_aty aty) in failwith s (*pour debug*)
+            end
+
+
 
   | _ ->
     HopixTypes.type_error pos "synth_expression: cas non implémenté"
@@ -272,7 +293,7 @@ and check_expression :
     let new_env = check_value_definition env vdef in
     check_expression new_env expr expected
 
-  | _ ->
+  | _ -> 
     let inferred = synth_expression env exp in
     check_equal_types pos ~expected ~given:inferred
 
@@ -459,12 +480,11 @@ and check_rec_fun :
     HopixTypes.typing_environment
   = fun env recfun ->
 
-  (* collect scheme *)
   let triplets =
     List.map (fun (id, ts, fundef) ->
       match ts with
       | None -> failwith "Type annotation is missing for recursive function"
-      | Some (Position.{ value = e; position = pos; } as tys) ->
+      | Some (Position.{ value = e; position = pos } as tys) ->
           let (s, local_ty_env) = check_type_scheme env pos e in
           (id, s, fundef, local_ty_env)
     ) recfun
@@ -480,23 +500,21 @@ and check_rec_fun :
   (* verif function body *)
   List.iter (fun (id, s, fundef, local_ty_env) ->
     let check_env =
-      List.fold_left (fun env_acc (id_other, s_other, _, _) ->
-        HopixTypes.bind_value (Position.value id_other) s_other env_acc
+      List.fold_left (fun acc (id2, sch2, _, _) ->
+        HopixTypes.bind_value (Position.value id2) sch2 acc
       ) local_ty_env triplets
     in
     let HopixTypes.Scheme(_, aty) = s in
-    let (in_ts, out_ty) =
-      HopixTypes.destruct_function_type_maximally (Position.position id) aty
+    let (param_ty, return_ty) =
+      HopixTypes.destruct_function_type (Position.position id) aty
     in
-    let FunctionDefinition(p, expr) = fundef in
-    let in_aty = match in_ts with
-    | [one] -> one
-    | many  -> HopixTypes.hprod many
-    in
-    let param_env = check_pattern check_env p in_aty in
-    check_expression param_env expr out_ty
+    let FunctionDefinition(pat, expr) = fundef in
+    let param_env = check_pattern check_env pat param_ty in
+    check_expression param_env expr return_ty
   ) triplets;
+
   fun_env
+
 
 let check_definition env = function
   | DefineValue vdef ->
