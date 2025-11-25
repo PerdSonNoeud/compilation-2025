@@ -256,10 +256,9 @@ let rec synth_expression :
   | Case (expr, branches) ->
     synth_case pos env expr branches
 
-  | Fun (FunctionDefinition (pat, expr)) ->
+  | Fun (FunctionDefinition (pat, expr)) -> 
     let (domain_ty, param_env) = synth_pattern env pat in
     let codomain_ty = synth_expression param_env expr in codomain_ty
-    (*HopixTypes.ATyArrow (domain_ty, codomain_ty)*)
 
   | Record (labels, tyargs_opt) ->
     synth_record env labels tyargs_opt
@@ -294,7 +293,7 @@ and check_expression :
     let new_env = check_value_definition env vdef in
     check_expression new_env expr expected
 
-  | _ ->
+  | _ -> 
     let inferred = synth_expression env exp in
     check_equal_types pos ~expected ~given:inferred
 
@@ -481,12 +480,11 @@ and check_rec_fun :
     HopixTypes.typing_environment
   = fun env recfun ->
 
-  (* collect scheme *)
   let triplets =
     List.map (fun (id, ts, fundef) ->
       match ts with
       | None -> failwith "Type annotation is missing for recursive function"
-      | Some (Position.{ value = e; position = pos; } as tys) ->
+      | Some (Position.{ value = e; position = pos } as tys) ->
           let (s, local_ty_env) = check_type_scheme env pos e in
           (id, s, fundef, local_ty_env)
     ) recfun
@@ -502,23 +500,21 @@ and check_rec_fun :
   (* verif function body *)
   List.iter (fun (id, s, fundef, local_ty_env) ->
     let check_env =
-      List.fold_left (fun env_acc (id_other, s_other, _, _) ->
-        HopixTypes.bind_value (Position.value id_other) s_other env_acc
+      List.fold_left (fun acc (id2, sch2, _, _) ->
+        HopixTypes.bind_value (Position.value id2) sch2 acc
       ) local_ty_env triplets
     in
     let HopixTypes.Scheme(_, aty) = s in
-    let (in_ts, out_ty) =
-      HopixTypes.destruct_function_type_maximally (Position.position id) aty
+    let (param_ty, return_ty) =
+      HopixTypes.destruct_function_type (Position.position id) aty
     in
-    let FunctionDefinition(p, expr) = fundef in
-    let in_aty = match in_ts with
-    | [one] -> one
-    | many  -> HopixTypes.hprod many
-    in
-    let param_env = check_pattern check_env p in_aty in
-    check_expression param_env expr out_ty
+    let FunctionDefinition(pat, expr) = fundef in
+    let param_env = check_pattern check_env pat param_ty in
+    check_expression param_env expr return_ty
   ) triplets;
+
   fun_env
+
 
 let check_definition env = function
   | DefineValue vdef ->
