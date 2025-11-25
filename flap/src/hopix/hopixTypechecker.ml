@@ -137,7 +137,16 @@ let rec check_pattern :
         HopixTypes.type_error pos "Arity mismatch in tagged-value pattern";
       List.fold_left2 check_pattern env ps arg_types
 
-    | POr ps -> let envs = List.map (fun p -> check_pattern env p expected) ps in env
+    | POr ps ->
+    let env0 = check_pattern env (List.hd ps) expected in
+    List.iter (fun p ->
+      let envi = check_pattern env p expected in
+      if envi <> env0 then
+        HopixTypes.type_error pos
+          "Branches d'un or-pattern ne lient pas les mêmes variables"
+    ) (List.tl ps);
+    env0
+
 
     | PAnd ps -> List.fold_left (fun env p -> check_pattern env p expected) env ps
 
@@ -249,14 +258,27 @@ let rec synth_expression :
 
   | Fun (FunctionDefinition (pat, expr)) ->
     let (domain_ty, param_env) = synth_pattern env pat in
-    let codomain_ty = synth_expression param_env expr in
-    HopixTypes.ATyArrow (domain_ty, codomain_ty)
+    let codomain_ty = synth_expression param_env expr in codomain_ty
+    (*HopixTypes.ATyArrow (domain_ty, codomain_ty)*)
 
   | Record (labels, tyargs_opt) ->
     synth_record env labels tyargs_opt
 
   | Field (e, label, ty_list) ->
     synth_field env e label ty_list
+   
+  | TypeAnnotation(e,ty) -> 
+    let e_aty = synth_expression env e in 
+    let aty = HopixTypes.internalize_ty env ty in begin
+    match aty with
+        | HopixTypes.ATyArrow (domain_ty, codomain_ty) ->
+            (check_equal_types pos ~expected:codomain_ty ~given:e_aty);
+            aty
+
+        |_ -> let s = Printf.sprintf "probleme "^ (HopixTypes.string_of_aty aty) in failwith s (*pour debug*)
+            end
+
+
 
   | _ ->
     HopixTypes.type_error pos "synth_expression: cas non implémenté"
