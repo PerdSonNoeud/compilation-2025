@@ -287,23 +287,8 @@ let rec synth_expression :
     let aty = synth_expression env expr in
     HopixTypes.href aty
 
-  | Tagged(c,ty_list_some,e_list) -> 
-    let aty_list = List.map (fun e -> synth_expression env e) e_list in  
-    let Scheme (params, aty) = HopixTypes.lookup_type_scheme_of_constructor pos (Position.value c) env in 
-    let aty_inst = 
-    match ty_list_some with
-        | None -> failwith "none"
-        | Some ty -> let given = List.map (fun t -> HopixTypes.internalize_ty env t) ty in
-        HopixTypes.instantiate_type_scheme (Scheme(params, aty)) given 
-    in
-    let arg_tys, res = HopixTypes.destruct_function_type_maximally pos aty_inst in 
-    (*if List.length arg_tys <> List.length e_list 
-    then (List.iter (fun e -> check_expression env e res) e_list ; res)
-    else*)
-    let env' = List.iter2 (fun e arg_ty ->
-    check_expression env e arg_ty
-    ) e_list arg_tys; in
-    res
+  | Tagged(c, tyargs_opt, el) ->
+    synth_tagged pos env c.value tyargs_opt el
 
   | Assign (e1, e2) ->
     let expected = synth_expression env e1 in
@@ -504,6 +489,61 @@ and verify_field_types :
     aty
   | None ->
     let (_, aty) = HopixTypes.destruct_function_type pos aty in
+    aty
+
+and synth_tagged :
+      Position.t ->
+      HopixTypes.typing_environment ->
+      HopixAST.constructor ->
+      HopixAST.ty Position.located list option ->
+      HopixAST.expression Position.located list ->
+      HopixTypes.aty
+  = fun pos env c tyargs_opt el ->
+  (* Alternative function to HopixTypes.destruct_function_type_maximally
+     that does it for n elements instead of all of them and use
+     HopixTypes.destruct_function_type to verify if it is the right type. *)
+  let rec destruct_function_type_nth n = function
+    | HopixTypes.ATyArrow (ins, out) when n > 0 ->
+      let (_, _) = HopixTypes.destruct_function_type pos out in
+      let ins', out = destruct_function_type_nth (n - 1) out in
+      (ins :: ins', out)
+    | ty ->
+      ([], ty)
+  in
+  (* Scheme of constructor *)
+  let Scheme (params, aty) as s =
+    try
+      HopixTypes.lookup_type_scheme_of_constructor pos c env
+    with HopixTypes.Unbound (p, bind) ->
+      HopixTypes.type_error p (
+        Printf.sprintf "Unbound %s." (HopixTypes.string_of_binding bind)
+      )
+  in
+  (* Expression list to aty list *)
+  let aty_list = List.map (fun e -> synth_expression env e) el in
+
+  let aty_inst =
+    match tyargs_opt with
+    | None -> failwith "none"
+    | Some ty ->
+      let given = List.map (fun t -> HopixTypes.internalize_ty env t) ty in
+      instantiate_type_scheme' pos s given
+  in
+  let arg_tys, res = HopixTypes.destruct_function_type_maximally pos aty_inst in
+
+  try
+    (* Same size *)
+    let env' = List.iter2 (fun e arg_ty ->
+      check_expression env e arg_ty
+    ) el arg_tys; in
+    res
+  with _ ->
+    (* Different size *)
+    let smallest_list = min (List.length el) (List.length arg_tys) in
+    let (_, result) = destruct_function_type_nth smallest_list aty_inst in
+    let e = (List.nth el (smallest_list - 1)) in
+    let aty = synth_expression env e in
+    check_equal_types (Position.position e) ~expected:aty ~given:result;
     aty
 
 and synth_sequence :
