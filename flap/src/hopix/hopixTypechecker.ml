@@ -277,7 +277,21 @@ let rec synth_expression :
         |_ -> let s = Printf.sprintf "probleme "^ (HopixTypes.string_of_aty aty) in failwith s (*pour debug*)
             end
 
-
+  | Tagged(c,ty_list_some,e_list) -> 
+    let aty_list = List.map (fun e -> synth_expression env e) e_list in  
+    let Scheme (params, aty) = HopixTypes.lookup_type_scheme_of_constructor pos (Position.value c) env in 
+    let aty_inst = 
+    match ty_list_some with
+        | None -> failwith "none"
+        | Some ty -> let given = List.map (fun t -> HopixTypes.internalize_ty env t) ty in
+        HopixTypes.instantiate_type_scheme (Scheme(params, aty)) given 
+    in
+    let arg_tys, _res = HopixTypes.destruct_function_type_maximally pos aty_inst in
+    let env' = List.fold_left2 (fun acc_env e arg_ty ->
+      check_expression acc_env e arg_ty ; acc_env
+    ) env e_list arg_tys in
+    aty_inst
+    
 
   | _ ->
     HopixTypes.type_error pos "synth_expression: cas non implémenté"
