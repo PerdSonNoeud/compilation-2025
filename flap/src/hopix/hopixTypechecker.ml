@@ -290,13 +290,17 @@ let rec synth_expression :
 
   | Assign (e1, e2) ->
     let expected = synth_expression env e1 in
-    let given = HopixTypes.href (synth_expression env e2) in
+    let expected = HopixTypes.destruct_reference_type pos expected in
+    let given = synth_expression env e2 in
     (check_equal_types pos ~expected ~given);
     HopixTypes.hunit
 
   | Read (expr) ->
     let aty = synth_expression env expr in
     HopixTypes.destruct_reference_type pos aty
+
+  | Sequence (el) ->
+    synth_sequence env el
 
   | _ ->
     HopixTypes.type_error pos "synth_expression: cas non implémenté"
@@ -472,6 +476,23 @@ and verify_field_types :
   | None ->
     let (_, aty) = HopixTypes.destruct_function_type pos aty in
     aty
+
+and synth_sequence :
+      HopixTypes.typing_environment ->
+      HopixAST.expression Position.located list ->
+      HopixTypes.aty
+  = fun env el ->
+  match el with
+  (* Empty sequence, should not happen but just in case *)
+  | [] ->
+    HopixTypes.hunit
+  (* Last expression of the sequence, we return its type *)
+  | [e] ->
+    synth_expression env e
+  (* In a sequence, each expression must return unit type, except the last one *)
+  | h::t ->
+    check_expression env h HopixTypes.hunit;
+    synth_sequence env t
 
 and check_value_definition :
       HopixTypes.typing_environment ->
