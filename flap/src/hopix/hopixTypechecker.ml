@@ -98,6 +98,17 @@ let synth_literal : HopixAST.literal -> HopixTypes.aty =
     | LChar _ -> HopixTypes.hchar
     | LString _ -> HopixTypes.hstring
 
+let instantiate_type_scheme':
+      Position.t ->
+      HopixTypes.aty_scheme ->
+      HopixTypes.aty list ->
+      HopixTypes.aty
+  = fun pos scheme aty_list ->
+  try
+    HopixTypes.instantiate_type_scheme scheme aty_list
+  with HopixTypes.InvalidInstantiation ii ->
+    invalid_instantiation pos ii.given ii.expected
+
 let rec check_pattern :
       HopixTypes.typing_environment ->
       HopixAST.pattern Position.located ->
@@ -130,7 +141,7 @@ let rec check_pattern :
         | None -> aty
         | Some ty ->
           let given = List.map (fun t -> HopixTypes.internalize_ty env t) ty in
-          HopixTypes.instantiate_type_scheme (Scheme(params, aty)) given
+          instantiate_type_scheme' pos (Scheme(params, aty)) given
       in check_equal_types pos ~expected ~given:aty;
       let arg_types, _ = HopixTypes.destruct_function_type_maximally pos aty in
       if List.length arg_types <> List.length ps then
@@ -190,10 +201,10 @@ and synth_pattern :
       match tyargs_opt with
       | None ->
         let fresh_args = List.map (fun _ -> HopixTypes.ATyVar (TId "_a")) params in
-        HopixTypes.instantiate_type_scheme (Scheme(params, aty)) fresh_args
+        instantiate_type_scheme' pos (Scheme(params, aty)) fresh_args
       | Some ty ->
         let given = List.map (fun t -> HopixTypes.internalize_ty env t) ty in
-        HopixTypes.instantiate_type_scheme (Scheme(params, aty)) given
+        instantiate_type_scheme' pos (Scheme(params, aty)) given
     in
     let arg_tys, _res = HopixTypes.destruct_function_type_maximally pos aty_inst in
     if List.length arg_tys <> List.length ps then
@@ -261,7 +272,7 @@ let rec synth_expression :
     let codomain_ty = synth_expression param_env expr in codomain_ty
 
   | Record (labels, tyargs_opt) ->
-    synth_record env labels tyargs_opt
+    synth_record pos env labels tyargs_opt
 
   | Field (e, label, ty_list) ->
     synth_field env e label ty_list
@@ -315,14 +326,14 @@ and synth_variable :
             HopixTypes.internalize_ty env t
           ) ty
         in
-        HopixTypes.instantiate_type_scheme scheme given
+        instantiate_type_scheme' pos scheme given
 
     | None ->
         let HopixTypes.Scheme (params, _) = scheme in
         let fresh_args =
           List.map (fun _ -> HopixTypes.ATyVar (TId "_a")) params (*TODO tempo à modif *)
         in
-        HopixTypes.instantiate_type_scheme scheme fresh_args
+        instantiate_type_scheme' pos scheme fresh_args
 
   with HopixTypes.Unbound (p, binding) ->
     HopixTypes.type_error p
@@ -369,11 +380,12 @@ and synth_case :
       ty_branch0
 
 and synth_record :
+      Position.t ->
       HopixTypes.typing_environment ->
       (HopixAST.label Position.located * HopixAST.expression Position.located) list ->
       HopixAST.ty Position.located list option ->
       HopixTypes.aty
-  = fun env labels tyargs_opt ->
+  = fun pos env labels tyargs_opt ->
   let (l, e) = List.hd labels in
   match tyargs_opt with
   | Some tyargs ->
@@ -384,7 +396,7 @@ and synth_record :
       HopixTypes.type_error l.position
       "Ill-formed type: one or multiple elements of the record are missing."
     ) labels;
-    check_record_expressions env labels aty_list;
+    check_record_expressions pos env labels aty_list;
     ATyCon (tc, aty_list)
 
   | None ->
@@ -392,16 +404,17 @@ and synth_record :
     "Ill-formed type: anotation of type required for a variable."
 
 and check_record_expressions :
-  HopixTypes.typing_environment ->
-  (HopixAST.label Position.located * HopixAST.expression Position.located) list ->
-  HopixTypes.aty list ->
-  unit
-  = fun env labels aty_list ->
+      Position.t ->
+      HopixTypes.typing_environment ->
+      (HopixAST.label Position.located * HopixAST.expression Position.located) list ->
+      HopixTypes.aty list ->
+      unit
+  = fun pos env labels aty_list ->
   List.iter (fun (l, e) ->
     let scheme =
       HopixTypes.lookup_type_scheme_of_label (Position.position l) (Position.value l) env
     in
-    let aty = HopixTypes.instantiate_type_scheme scheme aty_list in
+    let aty = instantiate_type_scheme' pos scheme aty_list in
     let (_, aty) = HopixTypes.destruct_function_type (Position.position l) aty in
     check_expression env e aty
   ) labels
@@ -448,7 +461,7 @@ and verify_field_types :
     List.iter2 (fun expected given ->
       check_equal_types (Position.position e) ~expected ~given
     ) expected given;
-    let aty = HopixTypes.instantiate_type_scheme scheme given in
+    let aty = instantiate_type_scheme' pos scheme given in
     let (_, aty) = HopixTypes.destruct_function_type pos aty in
     aty
   | None ->
