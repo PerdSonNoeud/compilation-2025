@@ -284,6 +284,10 @@ let rec synth_expression :
     (check_equal_types pos ~expected ~given);
     aty
 
+  | Ref (expr) ->
+    let aty = synth_expression env expr in
+    HopixTypes.href aty
+
   | _ ->
     HopixTypes.type_error pos "synth_expression: cas non implémenté"
 
