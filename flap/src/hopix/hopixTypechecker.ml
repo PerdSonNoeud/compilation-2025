@@ -286,11 +286,14 @@ let rec synth_expression :
         | Some ty -> let given = List.map (fun t -> HopixTypes.internalize_ty env t) ty in
         HopixTypes.instantiate_type_scheme (Scheme(params, aty)) given 
     in
-    let arg_tys, _res = HopixTypes.destruct_function_type_maximally pos aty_inst in
-    let env' = List.fold_left2 (fun acc_env e arg_ty ->
-      check_expression acc_env e arg_ty ; acc_env
-    ) env e_list arg_tys in
-    aty_inst
+    let arg_tys, res = HopixTypes.destruct_function_type_maximally pos aty_inst in 
+    (*if List.length arg_tys <> List.length e_list 
+    then (List.iter (fun e -> check_expression env e res) e_list ; res)
+    else*)
+    let env' = List.iter2 (fun e arg_ty ->
+    check_expression env e arg_ty
+    ) e_list arg_tys; in
+    res
     
 
   | _ ->
