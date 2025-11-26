@@ -302,6 +302,11 @@ let rec synth_expression :
   | Sequence (el) ->
     synth_sequence env el
 
+  | While (e1, e2) ->
+    let given = synth_expression env e1 in
+    check_equal_types pos ~expected:HopixTypes.hbool ~given;
+    synth_expression env e2
+
   | _ ->
     HopixTypes.type_error pos "synth_expression: cas non implémenté"
 
