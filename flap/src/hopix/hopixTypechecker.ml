@@ -258,7 +258,7 @@ let rec synth_expression :
     synth_variable pos env id.value tyargs_opt
 
   | Apply (e1, e2) ->
-    synth_apply env e1 e2
+    synth_apply pos env e1 e2
 
   | Tuple el ->
     let aty_list = List.map (fun e -> synth_expression env e) el in
@@ -340,19 +340,16 @@ and synth_variable :
     (Printf.sprintf "Unbound %s." (HopixTypes.string_of_binding binding))
 
 and synth_apply :
+      Position.t ->
       HopixTypes.typing_environment ->
       HopixAST.expression Position.located ->
       HopixAST.expression Position.located ->
       HopixTypes.aty
-  = fun env e1 e2 ->
+  = fun pos env e1 e2 ->
   let e1_aty = synth_expression env e1 in
-  match e1_aty with
-  | ATyArrow (t1, t2) ->
-    check_expression env e2 t1;
-    t2
-  | _ ->
-    HopixTypes.type_error (Position.position e1)
-    "This expression has type int which should be a function type."
+  let (aty1, aty2) = HopixTypes.destruct_function_type pos e1_aty in
+  check_expression env e2 aty1;
+  aty2
 
 and synth_case :
       Position.t ->
