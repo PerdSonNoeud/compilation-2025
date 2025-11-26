@@ -307,6 +307,13 @@ let rec synth_expression :
     check_equal_types pos ~expected:HopixTypes.hbool ~given;
     synth_expression env e2
 
+  | For (_, e1, e2, e3) ->
+    let given = synth_expression env e1 in
+    check_equal_types pos ~expected:HopixTypes.hint ~given;
+    let given = synth_expression env e2 in
+    check_equal_types pos ~expected:HopixTypes.hint ~given;
+    synth_expression env e3
+
   | _ ->
     HopixTypes.type_error pos "synth_expression: cas non implémenté"
 
