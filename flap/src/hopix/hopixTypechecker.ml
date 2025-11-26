@@ -288,6 +288,12 @@ let rec synth_expression :
     let aty = synth_expression env expr in
     HopixTypes.href aty
 
+  | Assign (e1, e2) ->
+    let expected = synth_expression env e1 in
+    let given = HopixTypes.href (synth_expression env e2) in
+    (check_equal_types pos ~expected ~given);
+    HopixTypes.hunit
+
   | _ ->
     HopixTypes.type_error pos "synth_expression: cas non implémenté"
 
