@@ -278,17 +278,11 @@ let rec synth_expression :
     synth_field env e label ty_list
    
   | TypeAnnotation(e,ty) -> 
-    let e_aty = synth_expression env e in 
-    let aty = HopixTypes.internalize_ty env ty in begin
-    match aty with
-        | HopixTypes.ATyArrow (domain_ty, codomain_ty) ->
-            (check_equal_types pos ~expected:codomain_ty ~given:e_aty);
-            aty
-
-        |_ -> let s = Printf.sprintf "probleme "^ (HopixTypes.string_of_aty aty) in failwith s (*pour debug*)
-            end
-
-
+    let given = synth_expression env e in 
+    let aty = HopixTypes.internalize_ty env ty in
+    let (_, expected) = HopixTypes.destruct_function_type pos aty in
+    (check_equal_types pos ~expected ~given);
+    aty
 
   | _ ->
     HopixTypes.type_error pos "synth_expression: cas non implémenté"
