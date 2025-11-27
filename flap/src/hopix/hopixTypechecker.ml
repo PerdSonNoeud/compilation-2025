@@ -27,8 +27,9 @@ let rec check_pattern_linearity
   = fun vars Position.{ value = p; position = pos; } ->
   let add_var vars id =
     let name = Position.value id in
+    let Id(s) = name in
     if List.mem name vars then
-      HopixTypes.type_error pos "Variable de pattern liée plusieurs fois"
+      HopixTypes.type_error pos (Printf.sprintf "The variable %s has already appeared in this pattern." s)
     else
       name :: vars
   in
