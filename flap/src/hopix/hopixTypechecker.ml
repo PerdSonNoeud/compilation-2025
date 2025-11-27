@@ -283,8 +283,8 @@ and synth_pattern :
         let (ty0, env0) = synth_pattern env p0 in
         List.iter (fun p_i ->
             let (ty_i, _env_i) = synth_pattern env p_i in
-            if ty_i <> ty0 then
-              HopixTypes.type_error pos "Les alternatives d'un or-pattern doivent avoir le même type";
+            if ty_i <> ty0 then check_equal_types pos ty0 ty_i
+              (*HopixTypes.type_error pos "Les alternatives d'un or-pattern doivent avoir le même type"*);
         ) rest;
         (ty0, env0)
     end
