@@ -109,6 +109,19 @@ let instantiate_type_scheme':
   with HopixTypes.InvalidInstantiation ii ->
     invalid_instantiation pos ii.given ii.expected
 
+and lookup_type_scheme_of_constructor':
+      Position.t ->
+      HopixAST.constructor ->
+      HopixTypes.typing_environment ->
+      HopixTypes.aty_scheme
+  = fun pos c env ->
+  try
+    HopixTypes.lookup_type_scheme_of_constructor pos c env
+  with HopixTypes.Unbound (p, bind) ->
+    HopixTypes.type_error p (
+      Printf.sprintf "Unbound %s." (HopixTypes.string_of_binding bind)
+    )
+
 let rec check_pattern :
       HopixTypes.typing_environment ->
       HopixAST.pattern Position.located ->
@@ -136,7 +149,7 @@ let rec check_pattern :
       List.fold_left2 (fun env p ty -> check_pattern env p ty) env ps expected_tys
 
     | PTaggedValue (k, tyargs, ps) -> let k_ = Position.value k in
-      let Scheme (params, aty) = HopixTypes.lookup_type_scheme_of_constructor pos k_ env in
+      let Scheme (params, aty) = lookup_type_scheme_of_constructor' pos k_ env in
       let aty = match tyargs with
         | None -> aty
         | Some ty ->
@@ -235,7 +248,7 @@ and synth_pattern :
 
   | PTaggedValue (k, tyargs_opt, ps) ->
     let k_ = Position.value k in
-    let Scheme (params, aty) = HopixTypes.lookup_type_scheme_of_constructor pos k_ env in
+    let Scheme (params, aty) = lookup_type_scheme_of_constructor' pos k_ env in
     let aty_inst =
       match tyargs_opt with
       | None ->
@@ -552,12 +565,7 @@ and synth_tagged :
   in
   (* Scheme of constructor *)
   let Scheme (params, aty) as s =
-    try
-      HopixTypes.lookup_type_scheme_of_constructor pos c env
-    with HopixTypes.Unbound (p, bind) ->
-      HopixTypes.type_error p (
-        Printf.sprintf "Unbound %s." (HopixTypes.string_of_binding bind)
-      )
+    lookup_type_scheme_of_constructor' pos c env
   in
   (* Expression list to aty list *)
   let aty_list = List.map (fun e -> synth_expression env e) el in
