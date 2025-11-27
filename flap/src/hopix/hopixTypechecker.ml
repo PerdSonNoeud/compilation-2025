@@ -176,19 +176,10 @@ let rec check_pattern :
 
 | PRecord (fields, tyargs_opt) ->
     let (tc, ty_args) =
-      try
-        HopixTypes.destruct_constructed_type pos expected
-      with _ -> 
-        HopixTypes.type_error pos (
-          Printf.sprintf "This expression has type %s which should be a record type."
-            (HopixTypes.string_of_aty expected))
+      HopixTypes.destruct_constructed_type pos expected
     in
-    let expected_labels = 
-      try
-        HopixTypes.lookup_fields_of_type_constructor pos tc env
-      with _ -> 
-        HopixTypes.type_error pos (
-          Printf.sprintf "This type constructor is not a record type.")
+    let expected_labels =
+      HopixTypes.lookup_fields_of_type_constructor pos tc env
     in
     if List.length fields <> List.length expected_labels then
         HopixTypes.type_error pos (Printf.sprintf 
