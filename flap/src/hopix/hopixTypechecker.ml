@@ -160,6 +160,46 @@ let rec check_pattern :
 
     | PAnd ps -> List.fold_left (fun env p -> check_pattern env p expected) env ps
 
+| PRecord (fields, tyargs_opt) ->
+    let (tc, ty_args) =
+      try
+        HopixTypes.destruct_constructed_type pos expected
+      with _ -> 
+        HopixTypes.type_error pos (
+          Printf.sprintf "This expression has type %s which should be a record type."
+            (HopixTypes.string_of_aty expected))
+    in
+    let expected_labels = 
+      try
+        HopixTypes.lookup_fields_of_type_constructor pos tc env
+      with _ -> 
+        HopixTypes.type_error pos (
+          Printf.sprintf "This type constructor is not a record type.")
+    in
+    if List.length fields <> List.length expected_labels then
+        HopixTypes.type_error pos (Printf.sprintf 
+          "Record pattern has wrong number of fields. Expected %d, got %d."
+          (List.length expected_labels) (List.length fields));
+    let final_env = List.fold_left (fun acc_env (lbl_, p) ->
+        let lbl = Position.value lbl_ in
+        let lbl_pos = Position.position lbl_ in
+        let LId(s) = lbl in
+        if not (List.mem lbl expected_labels) then 
+            HopixTypes.type_error lbl_pos (Printf.sprintf "There is no type definition for label `"^s^"'.");
+        let scheme = HopixTypes.lookup_type_scheme_of_label lbl_pos lbl env in
+        let instantiated_ty = instantiate_type_scheme' lbl_pos scheme ty_args in
+        let (record_ty_check, field_ty) = 
+          try
+            HopixTypes.destruct_function_type lbl_pos instantiated_ty
+          with _ -> 
+            failwith ("Internal error: type of label is not a function.")
+        in
+        check_equal_types lbl_pos ~expected ~given:record_ty_check;
+        check_pattern acc_env p field_ty
+    ) env fields in
+    final_env
+
+
 and synth_pattern :
       HopixTypes.typing_environment ->
       HopixAST.pattern Position.located ->
@@ -211,7 +251,7 @@ and synth_pattern :
     let env' = List.fold_left2 (fun acc_env p_i arg_ty ->
       check_pattern acc_env p_i arg_ty
     ) env ps arg_tys in
-    (aty_inst, env')
+    (_res, env')
 
   | PRecord (fields, tyargs_opt) ->
     let tys_in_order, env' =
