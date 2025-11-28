@@ -1,5 +1,7 @@
 flap/_build/
-flap/flap.opam/
+flap/flap.opam
 flap/src/input
 flap/src/flap.exe
 flap/testing/flaptest.exe
+
+flap/tmp.html
