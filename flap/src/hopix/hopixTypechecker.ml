@@ -167,28 +167,30 @@ let rec check_pattern :
       HopixTypes.type_error pos "Arity mismatch in tuple pattern";
     List.fold_left2 (fun env p ty -> check_pattern env p ty) env ps expected_tys
 
-  | PTaggedValue (k, tyargs, ps) -> let k_ = Position.value k in
-    let Scheme (params, aty) = lookup_type_scheme_of_constructor' pos k_ env in
+  | PTaggedValue (k, tyargs, ps) ->
+    let k = Position.value k in
+    let Scheme (params, aty) = lookup_type_scheme_of_constructor' pos k env in
     let aty = match tyargs with
       | None -> aty
       | Some ty ->
         let given = List.map (fun t -> HopixTypes.internalize_ty env t) ty in
         instantiate_type_scheme' pos (Scheme(params, aty)) given
-    in check_equal_types pos ~expected ~given:aty;
-    let arg_types, _ = HopixTypes.destruct_function_type_maximally pos aty in
+    in
+    let arg_types, given = HopixTypes.destruct_function_type_maximally pos aty in
+    check_equal_types pos ~expected ~given;
     if List.length arg_types <> List.length ps then
       HopixTypes.type_error pos "Arity mismatch in tagged-value pattern";
     List.fold_left2 check_pattern env ps arg_types
 
   | POr ps ->
-  let env0 = check_pattern env (List.hd ps) expected in
-  List.iter (fun p ->
-    let envi = check_pattern env p expected in
-    if envi <> env0 then
-      HopixTypes.type_error pos
-        "Branches d'un or-pattern ne lient pas les mêmes variables"
-  ) (List.tl ps);
-  env0
+    let env0 = check_pattern env (List.hd ps) expected in
+    List.iter (fun p ->
+      let envi = check_pattern env p expected in
+      if envi <> env0 then
+        HopixTypes.type_error pos
+          "Branches d'un or-pattern ne lient pas les mêmes variables"
+    ) (List.tl ps);
+    env0
 
   | PAnd ps -> List.fold_left (fun env p -> check_pattern env p expected) env ps
 
@@ -307,9 +309,6 @@ let rec synth_expression :
     let aty_list = List.map (fun e -> synth_expression env e) el in
     ATyTuple aty_list
 
-  | Case (expr, branches) ->
-    synth_case pos env expr branches
-
   | Define (vdef, expr) ->
     let new_env = check_value_definition env vdef in
     synth_expression new_env expr
@@ -397,6 +396,9 @@ and check_expression :
     let new_env = check_value_definition env vdef in
     check_expression new_env expr expected
 
+  | Case (expr, branches) ->
+    check_case pos env expr branches expected
+
   | _ ->
     let inferred = synth_expression env exp in
     check_equal_types pos ~expected ~given:inferred
@@ -438,30 +440,23 @@ and synth_apply :
   check_expression env e2 aty1;
   aty2
 
-and synth_case :
+and check_case :
       Position.t ->
       HopixTypes.typing_environment ->
       HopixAST.expression Position.located ->
       HopixAST.branch Position.located list ->
-      HopixTypes.aty
-  = fun pos env expr branches ->
-  let t_scrut = synth_expression env expr in
+      HopixTypes.aty ->
+      unit
+  = fun pos env exp branches expected ->
+  let aty = synth_expression env exp in
   match branches with
     | [] -> HopixTypes.type_error pos "Match sans branches"
-    | (Position.{ value = Branch (pat, expr); position = bpos }) :: rest ->
-      (* première branche *)
-      let (pat_ty0, env_pat0) = synth_pattern env pat in
-      check_equal_types (Position.position pat) ~expected:t_scrut ~given:pat_ty0;
-      let ty_branch0 = synth_expression env_pat0 expr in
-      (* autres branches  *)
-      List.iter (fun (Position.{ value = Branch (pat_i, expr_i); position = bpos_i }) ->
-        let (pat_tyi, env_pati) = synth_pattern env pat_i in
-        check_equal_types (Position.position pat_i) ~expected:t_scrut ~given:pat_tyi;
-        let ty_br_i = synth_expression env_pati expr_i in
-        if ty_br_i <> ty_branch0 then
-          HopixTypes.type_error bpos_i "Types de branches incompatibles dans le match"
-      ) rest;
-      ty_branch0
+    | _ ->
+      List.iter (fun (Position.{ value = Branch (pat, expr); position = bpos }) ->
+        let _ = check_pattern_linearity [] pat in
+        let env_pat = check_pattern env pat aty in
+        check_expression env_pat expr expected;
+      ) branches;
 
 and synth_record :
       Position.t ->
