@@ -233,8 +233,17 @@ let translate (p : S.t) env =
           | Some e -> e
       in
       ([], xc)
-    | S.Define (vdef, a) ->
-         failwith "Students! This is your job!"
+    | S.Define (vdef, a) -> begin
+         match vdef with 
+            | SimpleValue(id, e) ->
+            let S.Id(s) = id in
+            let afs, a = expression env a in
+            let efs, e = expression env e in
+             afs @ efs, T.Define(T.Id(s),a,e)
+            | _ -> failwith "rec pas fait"
+        end
+        
+            
     | S.Apply (a, bs) ->
          failwith "Students! This is your job!"
     | S.IfThenElse (a, b, c) ->
