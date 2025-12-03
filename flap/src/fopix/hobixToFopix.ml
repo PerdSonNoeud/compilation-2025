@@ -132,9 +132,9 @@ let free_variables =
     | S.Variable x ->
        M.singleton x
     | S.While (cond, e) ->
-       failwith "Students! This is your job!"
+        unions fvs [cond; e]
     | S.Define (vd, a) ->
-       failwith "Students! This is your job!"
+       fvs a
     | S.ReadBlock (a, b) ->
        unions fvs [a; b]
     | S.Apply (a, b) ->
@@ -144,7 +144,7 @@ let free_variables =
     | S.AllocateBlock a ->
        fvs a
     | S.Fun (xs, e) ->
-       failwith "Students! This is your job!"
+       fvs e
     | S.Switch (a, b, c) ->
        let c = match c with None -> [] | Some c -> [c] in
        unions fvs (a :: ExtStd.Array.present_to_list b @ c)
