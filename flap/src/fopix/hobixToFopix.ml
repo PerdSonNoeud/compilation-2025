@@ -218,7 +218,7 @@ let translate (p : S.t) env =
        fs @ List.map (fun (x, e) -> T.DefineValue (x, e)) defs
 
   and define_recursive_functions rdefs =
-       failwith "Students! This is your job!"
+       failwith "Students! This is your job! rec"
   and expression env = function
     | S.Literal l ->
       [], T.Literal (literal l)
@@ -245,7 +245,13 @@ let translate (p : S.t) env =
         
             
     | S.Apply (a, bs) ->
-         failwith "Students! This is your job!"
+        let afs , a = expression env a in  
+        (*let bs_ = List.map (fun x -> expression env x ) bs in
+        let bsfs, bs_ = List.split bs_ in*)
+        let efs, bs_ = expressions env bs in
+        afs @ efs , T.UnknownFunCall(a,bs_)
+        
+         
     | S.IfThenElse (a, b, c) ->
       let afs, a = expression env a in
       let bfs, b = expression env b in
@@ -253,7 +259,14 @@ let translate (p : S.t) env =
       afs @ bfs @ cfs, T.IfThenElse (a, b, c)
 
     | S.Fun (x, e) ->
-         failwith "Students! This is your job!"
+         let xs, ids = 
+         match x with 
+            | S.Id(s)::xss -> List.map identifier xss , make_fresh_function_identifier ()
+            | _-> failwith "vide"
+         in
+         let efs, e = expression env e in
+         efs, T.FunCall(ids, e::[])
+    
     | S.AllocateBlock a ->
       let afs, a = expression env a in
       (afs, allocate_block a)
@@ -288,8 +301,8 @@ let translate (p : S.t) env =
   and expressions env = function
     | [] ->
        [], []
-    | e :: es ->
-       let efs, es = expressions env es in
+    | e :: es -> 
+       let efs, es = expressions env es in 
        let fs, e = expression env e in
        fs @ efs, e :: es
 

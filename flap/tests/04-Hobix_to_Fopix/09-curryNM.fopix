@@ -1,0 +1,226 @@
+val curry_1_2 =
+  _1 (_2 (_3 (call (f) with (x, y))))
+val curry_1_3 =
+  _4 (_5 (_6 (call (f) with (x, y1, y2))))
+val curry_1_4 =
+  _7 (_8 (_9 (call (f) with (x, y1, y2, y3))))
+val curry_1_5 =
+  _10 (_11 (_12 (call (f) with (x, y1, y2, y3, y4))))
+val curry_1_6 =
+  _13 (_14 (_15 (call (f) with (x, y1, y2, y3, y4, y5))))
+val f2 =
+  _16 (call (`+`) with (x1, x2))
+val f3 =
+  _17 (call (`+`) with (call (`+`) with (x1, x2), x3))
+val f4 =
+  _18
+  (
+    call
+    (`+`)
+    with
+    (call (`+`) with (call (`+`) with (x1, x2), x3), x4)
+  )
+val f5 =
+  _19
+  (
+    call
+    (`+`)
+    with
+    (
+      call
+      (`+`)
+      with
+      (call (`+`) with (call (`+`) with (x1, x2), x3), x4),
+      x5
+    )
+  )
+val f6 =
+  _20
+  (
+    call
+    (`+`)
+    with
+    (
+      call
+      (`+`)
+      with
+      (
+        call
+        (`+`)
+        with
+        (call (`+`) with (call (`+`) with (x1, x2), x3), x4),
+        x5
+      ),
+      x6
+    )
+  )
+val test1_2 =
+  call
+  (print_int)
+  with
+  (
+    call
+    (call
+    (call
+    (curry_1_2)
+    with
+    (f2))
+    with
+    (1))
+    with
+    (2)
+  )
+val test1_3 =
+  call
+  (print_int)
+  with
+  (
+    call
+    (call
+    (call
+    (curry_1_3)
+    with
+    (f3))
+    with
+    (1))
+    with
+    (2, 3)
+  )
+val test1_4 =
+  call
+  (print_int)
+  with
+  (
+    call
+    (call
+    (call
+    (curry_1_4)
+    with
+    (f4))
+    with
+    (1))
+    with
+    (2, 3, 4)
+  )
+val test1_5 =
+  call
+  (print_int)
+  with
+  (
+    call
+    (call
+    (call
+    (curry_1_5)
+    with
+    (f5))
+    with
+    (1))
+    with
+    (2, 3, 4, 5)
+  )
+val test1_6 =
+  call
+  (print_int)
+  with
+  (
+    call
+    (call
+    (call
+    (curry_1_6)
+    with
+    (f6))
+    with
+    (1))
+    with
+    (2, 3, 4, 5, 6)
+  )
+val curry_2_2 =
+  _21 (_22 (_23 (call (f) with (x, y))))
+val curry_2_3 =
+  _24 (_25 (_26 (call (f) with (x, y1, y2))))
+val curry_2_4 =
+  _27 (_28 (_29 (call (f) with (x, y1, y2, y3))))
+val curry_2_5 =
+  _30 (_31 (_32 (call (f) with (x, y1, y2, y3, y4))))
+val curry_2_6 =
+  _33 (_34 (_35 (call (f) with (x, y1, y2, y3, y4, y5))))
+val test2_2 =
+  call
+  (print_int)
+  with
+  (
+    call
+    (call
+    (call
+    (curry_2_2)
+    with
+    (f2))
+    with
+    (0, 1))
+    with
+    (2)
+  )
+val test2_3 =
+  call
+  (print_int)
+  with
+  (
+    call
+    (call
+    (call
+    (curry_2_3)
+    with
+    (f3))
+    with
+    (0, 1))
+    with
+    (2, 3)
+  )
+val test2_4 =
+  call
+  (print_int)
+  with
+  (
+    call
+    (call
+    (call
+    (curry_2_4)
+    with
+    (f4))
+    with
+    (0, 1))
+    with
+    (2, 3, 4)
+  )
+val test2_5 =
+  call
+  (print_int)
+  with
+  (
+    call
+    (call
+    (call
+    (curry_2_5)
+    with
+    (f5))
+    with
+    (0, 1))
+    with
+    (2, 3, 4, 5)
+  )
+val test2_6 =
+  call
+  (print_int)
+  with
+  (
+    call
+    (call
+    (call
+    (curry_2_6)
+    with
+    (f6))
+    with
+    (0, 1))
+    with
+    (2, 3, 4, 5, 6)
+  )

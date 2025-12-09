@@ -1,0 +1,10 @@
+val curry =
+  _1 (_2 (_3 (call (f) with (x, y))))
+val add =
+  _4 (call (`+`) with (x, y))
+val g =
+  call (curry) with (add)
+val h =
+  call (g) with (1)
+val main =
+  call (print_int) with (call (h) with (41))
