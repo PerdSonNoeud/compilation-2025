@@ -235,59 +235,44 @@ let translate (p : S.t) env =
           | Some e -> e
       in
       ([], xc)
-    | S.Define (vdef, a) -> begin
-         match vdef with 
-            | SimpleValue(id, e) -> 
-            let next_def, e_ = expression env a in
-            let def, defs =
+    | S.Define (vdef, a) ->
+      begin match vdef with 
+        | SimpleValue(id, e) -> 
+          let next_def, e_ = expression env a in
+          let def, defs =
             let fs, e = expression (reset_vars env) e in
             fs, [(identifier id, e)] in
-            let make_def e__ f = 
-                let x = make_fresh_variable () in
-                T.Define (x, e__, f x) in
+          def @ next_def, defines defs e_
+        | _ -> failwith "rec pas fait"
+      end
 
-            def @ next_def, make_def defs e_
-            | _ -> failwith "rec pas fait"
-        end
-        
-            
     | S.Apply (a, bs) ->
-        let afs , a = expression env a in  
-        let efs, bs_ = expressions env bs in
-        begin
-        match a with
-            | T.Variable(T.Id s) as s_ -> 
-                let e = 
-                if List.mem s predifined_functions || FopixInterpreter.is_binary_primitive s then 
-                    T.FunCall (T.FunId s, bs_) 
-                else 
-                    T.UnknownFunCall (read_block s_ (lint 0), bs_ @ [s_])
-                in
-                afs @ efs, e
-                    
-        (*afs @ efs , T.UnknownFunCall(a,bs_)*)
-            | _ -> let id = make_fresh_variable () in
-                   let var = T.Variable id in
-                   let instr = T.UnknownFunCall ((read_block var (lint 0)), bs_@ [var]) in
-                   afs @ efs, T.Define (id, a, instr)
-        end
-                   
-        
-         
+      let afs , a = expression env a in  
+      let efs, bs_ = expressions env bs in
+      begin match a with
+      | T.Variable(T.Id s) as s_ ->
+        let e =
+        if List.mem s predifined_functions || FopixInterpreter.is_binary_primitive s then
+          T.FunCall (T.FunId s, bs_)
+        else
+          T.UnknownFunCall (read_block s_ (lint 0), bs_ @ [s_])
+        in
+        afs @ efs, e
+      | _ -> let id = make_fresh_variable () in
+        let var = T.Variable id in
+        let instr = T.UnknownFunCall ((read_block var (lint 0)), bs_@ [var]) in
+        afs @ efs, T.Define (id, a, instr)
+      end
+
     | S.IfThenElse (a, b, c) ->
       let afs, a = expression env a in
       let bfs, b = expression env b in
       let cfs, c = expression env c in
       afs @ bfs @ cfs, T.IfThenElse (a, b, c)
 
-    | S.Fun (x, e) ->
-         let xs, ids = 
-         match x with 
-            | S.Id(s)::xss -> List.map identifier xss , make_fresh_function_identifier ()
-            | _-> failwith "vide"
-         in
-         let efs, e = expression env e in
-         efs, T.FunCall(ids, e::[])
+    | S.Fun (x, e) as f ->
+      let def_list, e = make_fun env x e (free_variables f) in
+      (def_list, e)
     
     | S.AllocateBlock a ->
       let afs, a = expression env a in
@@ -319,6 +304,33 @@ let translate (p : S.t) env =
       afs @ bsfs @ dfs,
       T.Switch (a, Array.of_list bs, default)
 
+  and make_fun env ids e free_vars =
+    let fun_id = make_fresh_function_identifier () in
+    let clo_id = make_fresh_variable () in
+    let clo_var = T.Variable clo_id in
+
+    let self = T.Id "self" in
+
+    let block = allocate_block (lint (List.length free_vars + 1)) in
+    let (env, _, insts) =
+      List.fold_right (fun id (env, i, acc) ->
+        let i' = lint i in
+        let (_, e) = expression env (S.Variable id) in
+        let acc_ = write_block clo_var i' e in
+        let new_env = bind_external id i env in
+        (new_env, i + 1, acc_::acc)
+      ) free_vars (env, 1, []) in
+    let (def_list, e) = expression env e in
+
+    let ids = List.map identifier ids in
+    let t_fun = T.DefineFunction (fun_id, ids @ [self], e) in
+
+    let fun_ptr_inst = write_block clo_var (lint 0) (T.Literal (T.LFun (fun_id))) in
+
+    let insts = seqs (List.rev (clo_var :: insts @ [fun_ptr_inst])) in
+    let closure = T.Define (clo_id, block, insts) in
+
+    def_list @ [t_fun], closure
 
   and expressions env = function
     | [] ->
