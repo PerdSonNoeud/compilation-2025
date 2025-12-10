@@ -197,6 +197,8 @@ let arity_of_external id env =
     | None -> assert false (* By is_external. *)
 
 
+let predifined_functions = ["print_int"]
+
 (** [translate p env] turns an Hobix program [p] into a Fopix program
     using [env] to retrieve contextual information. *)
 let translate (p : S.t) env =
@@ -235,21 +237,41 @@ let translate (p : S.t) env =
       ([], xc)
     | S.Define (vdef, a) -> begin
          match vdef with 
-            | SimpleValue(id, e) ->
-            let S.Id(s) = id in
-            let afs, a = expression env a in
-            let efs, e = expression env e in
-             afs @ efs, T.Define(T.Id(s),a,e)
+            | SimpleValue(id, e) -> 
+            let next_def, e_ = expression env a in
+            let def, defs =
+            let fs, e = expression (reset_vars env) e in
+            fs, [(identifier id, e)] in
+            let make_def e__ f = 
+                let x = make_fresh_variable () in
+                T.Define (x, e__, f x) in
+
+            def @ next_def, make_def defs e_
             | _ -> failwith "rec pas fait"
         end
         
             
     | S.Apply (a, bs) ->
         let afs , a = expression env a in  
-        (*let bs_ = List.map (fun x -> expression env x ) bs in
-        let bsfs, bs_ = List.split bs_ in*)
         let efs, bs_ = expressions env bs in
-        afs @ efs , T.UnknownFunCall(a,bs_)
+        begin
+        match a with
+            | T.Variable(T.Id s) as s_ -> 
+                let e = 
+                if List.mem s predifined_functions || FopixInterpreter.is_binary_primitive s then 
+                    T.FunCall (T.FunId s, bs_) 
+                else 
+                    T.UnknownFunCall (read_block s_ (lint 0), bs_ @ [s_])
+                in
+                afs @ efs, e
+                    
+        (*afs @ efs , T.UnknownFunCall(a,bs_)*)
+            | _ -> let id = make_fresh_variable () in
+                   let var = T.Variable id in
+                   let instr = T.UnknownFunCall ((read_block var (lint 0)), bs_@ [var]) in
+                   afs @ efs, T.Define (id, a, instr)
+        end
+                   
         
          
     | S.IfThenElse (a, b, c) ->
