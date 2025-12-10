@@ -71,6 +71,8 @@ module T = Target.AST
    Helpers functions.
 *)
 
+let predifined_functions = ["print_int"]
+
 let error pos msg =
   Error.error "compilation" pos msg
 
@@ -130,11 +132,25 @@ let free_variables =
     | S.Literal _ ->
        M.empty
     | S.Variable x ->
+      let S.Id s = x in
+      if List.mem s predifined_functions || FopixInterpreter.is_binary_primitive s then
+       M.empty
+      else
        M.singleton x
     | S.While (cond, e) ->
         unions fvs [cond; e]
     | S.Define (vd, a) ->
-       fvs a
+       let sv_list =
+        match vd with
+        | SimpleValue (id, e) ->
+          [(id, e)]
+        | RecFunctions (sv_list) ->
+          sv_list
+      in
+      let ids, expressions = List.split sv_list in
+      let ids_set = M.of_list ids in
+      unions fvs (a::expressions)
+      |> M.filter (fun id -> not (M.mem id ids_set))
     | S.ReadBlock (a, b) ->
        unions fvs [a; b]
     | S.Apply (a, b) ->
@@ -144,7 +160,8 @@ let free_variables =
     | S.AllocateBlock a ->
        fvs a
     | S.Fun (xs, e) ->
-       fvs e
+       let ids_set = M.of_list xs in
+       M.filter (fun id -> not (M.mem id ids_set)) (fvs e)
     | S.Switch (a, b, c) ->
        let c = match c with None -> [] | Some c -> [c] in
        unions fvs (a :: ExtStd.Array.present_to_list b @ c)
@@ -178,6 +195,9 @@ type environment = {
     externals : (HobixAST.identifier, int) Dict.t;
 }
 
+let bind_vars id e env =
+  { env with vars = Dict.insert id e env.vars }
+
 let initial_environment () =
   { vars = Dict.empty; externals = Dict.empty }
 
@@ -197,7 +217,6 @@ let arity_of_external id env =
     | None -> assert false (* By is_external. *)
 
 
-let predifined_functions = ["print_int"]
 
 (** [translate p env] turns an Hobix program [p] into a Fopix program
     using [env] to retrieve contextual information. *)
@@ -317,7 +336,7 @@ let translate (p : S.t) env =
         let i' = lint i in
         let (_, e) = expression env (S.Variable id) in
         let acc_ = write_block clo_var i' e in
-        let new_env = bind_external id i env in
+        let new_env = bind_vars id (read_block (T.Variable self) i') env in
         (new_env, i + 1, acc_::acc)
       ) free_vars (env, 1, []) in
     let (def_list, e) = expression env e in
