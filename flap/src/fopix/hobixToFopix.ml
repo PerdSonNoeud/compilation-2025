@@ -239,7 +239,16 @@ let translate (p : S.t) env =
        fs @ List.map (fun (x, e) -> T.DefineValue (x, e)) defs
 
   and define_recursive_functions rdefs =
-       failwith "Students! This is your job! rec"
+    List.fold_left (fun (fs, defs) (id, e) ->
+      match e with
+      | S.Fun (f_id, expr) ->
+        let f = S.Define (S.RecFunctions rdefs, e) in
+        let free_vars = free_variables f in
+        let t_defs, e = make_fun env f_id expr free_vars in
+        fs @ t_defs, defs @ [identifier id, e]
+      | _  -> failwith "Parsing error"
+    ) ([], []) rdefs
+
   and expression env = function
     | S.Literal l ->
       [], T.Literal (literal l)
