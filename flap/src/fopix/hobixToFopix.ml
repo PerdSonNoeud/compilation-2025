@@ -71,7 +71,7 @@ module T = Target.AST
    Helpers functions.
 *)
 
-let predifined_functions = ["print_int"]
+let predefined_functions = ["print_int"]
 
 let error pos msg =
   Error.error "compilation" pos msg
@@ -133,7 +133,7 @@ let free_variables =
        M.empty
     | S.Variable x ->
       let S.Id s = x in
-      if List.mem s predifined_functions || FopixInterpreter.is_binary_primitive s then
+      if List.mem s predefined_functions || FopixInterpreter.is_binary_primitive s then
        M.empty
       else
        M.singleton x
@@ -216,8 +216,6 @@ let arity_of_external id env =
     | Some n -> n
     | None -> assert false (* By is_external. *)
 
-
-
 (** [translate p env] turns an Hobix program [p] into a Fopix program
     using [env] to retrieve contextual information. *)
 let translate (p : S.t) env =
@@ -264,23 +262,23 @@ let translate (p : S.t) env =
       in
       ([], xc)
     | S.Define (vdef, a) ->
-      begin match vdef with 
-        | SimpleValue(id, e) -> 
-          let next_def, e_ = expression env a in
-          let def, defs =
-            let fs, e = expression (reset_vars env) e in
-            fs, [(identifier id, e)] in
-          def @ next_def, defines defs e_
-        | _ -> failwith "rec pas fait"
+      let next_def, e_ = expression env a in
+      begin match vdef with
+        | SimpleValue(id, e) ->
+          let fs, e = expression (reset_vars env) e in
+          fs @ next_def, defines [(identifier id, e)] e_
+        | RecFunctions fdefs ->
+          let fs, defs = define_recursive_functions fdefs in
+          fs @ next_def, defines defs e_
       end
 
     | S.Apply (a, bs) ->
-      let afs , a = expression env a in  
+      let afs , a = expression env a in
       let efs, bs_ = expressions env bs in
       begin match a with
       | T.Variable(T.Id s) as s_ ->
         let e =
-        if List.mem s predifined_functions || FopixInterpreter.is_binary_primitive s then
+        if List.mem s predefined_functions || FopixInterpreter.is_binary_primitive s then
           T.FunCall (T.FunId s, bs_)
         else
           T.UnknownFunCall (read_block s_ (lint 0), bs_ @ [s_])
