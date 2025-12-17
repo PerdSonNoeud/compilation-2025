@@ -71,6 +71,8 @@ module T = Target.AST
    Helpers functions.
 *)
 
+let predefined_functions = ["print_int"]
+
 let error pos msg =
   Error.error "compilation" pos msg
 
@@ -128,26 +130,43 @@ let free_variables =
   in
   let rec fvs = function
     | S.Literal _ ->
-       M.empty
+      M.empty
     | S.Variable x ->
-       M.singleton x
+      let S.Id s = x in
+      if List.mem s predefined_functions || FopixInterpreter.is_binary_primitive s then
+        M.empty
+      else
+        M.singleton x
     | S.While (cond, e) ->
-        unions fvs [cond; e]
+      unions fvs [cond; e]
     | S.Define (vd, a) ->
-       fvs a
+      let sv_list =
+        match vd with
+        | SimpleValue (id, e) ->
+          [(id, e)]
+        | RecFunctions (sv_list) ->
+          sv_list
+      in
+      let ids, expressions = List.split sv_list in
+      let ids_set = M.of_list ids in
+      M.filter (fun id -> not (M.mem id ids_set)) (unions fvs (a::expressions))
     | S.ReadBlock (a, b) ->
-       unions fvs [a; b]
+      unions fvs [a; b]
     | S.Apply (a, b) ->
-       unions fvs (a :: b)
+      unions fvs (a :: b)
     | S.WriteBlock (a, b, c) | S.IfThenElse (a, b, c) ->
-       unions fvs [a; b; c]
+      unions fvs [a; b; c]
     | S.AllocateBlock a ->
-       fvs a
+      fvs a
     | S.Fun (xs, e) ->
-       fvs e
+      let ids_set = M.of_list xs in
+      M.filter (fun id -> not (M.mem id ids_set)) (fvs e)
     | S.Switch (a, b, c) ->
-       let c = match c with None -> [] | Some c -> [c] in
-       unions fvs (a :: ExtStd.Array.present_to_list b @ c)
+      let c = match c with
+        | None -> []
+        | Some c -> [c]
+      in
+      unions fvs (a :: ExtStd.Array.present_to_list b @ c)
   in
   fun e -> M.elements (fvs e)
 
@@ -178,6 +197,9 @@ type environment = {
     externals : (HobixAST.identifier, int) Dict.t;
 }
 
+let bind_vars id e env =
+  { env with vars = Dict.insert id e env.vars }
+
 let initial_environment () =
   { vars = Dict.empty; externals = Dict.empty }
 
@@ -196,19 +218,20 @@ let arity_of_external id env =
     | Some n -> n
     | None -> assert false (* By is_external. *)
 
-
 (** [translate p env] turns an Hobix program [p] into a Fopix program
     using [env] to retrieve contextual information. *)
 let translate (p : S.t) env =
   let rec program env defs =
     let env, defs = ExtStd.List.foldmap definition env defs in
     (List.flatten defs, env)
+
   and definition env = function
     | S.DeclareExtern (id, n) ->
        let env = bind_external id n env in
        (env, [T.ExternalFunction (function_identifier id, n)])
     | S.DefineValue vd ->
        (env, value_definition env vd)
+
   and value_definition env = function
     | S.SimpleValue (x, e) ->
        let fs, e = expression (reset_vars env) e in
@@ -218,7 +241,16 @@ let translate (p : S.t) env =
        fs @ List.map (fun (x, e) -> T.DefineValue (x, e)) defs
 
   and define_recursive_functions rdefs =
-       failwith "Students! This is your job!"
+    List.fold_left (fun (fs, defs) (id, e) ->
+      match e with
+      | S.Fun (f_id, expr) ->
+        let f = S.Define (S.RecFunctions rdefs, e) in
+        let free_vars = free_variables f in
+        let t_defs, e = make_fun env f_id expr free_vars in
+        fs @ t_defs, defs @ [identifier id, e]
+      | _  -> failwith "Parsing error"
+    ) ([], []) rdefs
+
   and expression env = function
     | S.Literal l ->
       [], T.Literal (literal l)
@@ -227,47 +259,67 @@ let translate (p : S.t) env =
        let efs, e = expression env e in
        cfs @ efs, T.While (cond, e)
     | S.Variable x ->
-      let xc =
-        match Dict.lookup x env.vars with
-          | None -> T.Variable (identifier x)
-          | Some e -> e
-      in
-      ([], xc)
-    | S.Define (vdef, a) -> begin
-         match vdef with 
-            | SimpleValue(id, e) ->
-            let S.Id(s) = id in
-            let afs, a = expression env a in
-            let efs, e = expression env e in
-             afs @ efs, T.Define(T.Id(s),a,e)
-            | _ -> failwith "rec pas fait"
-        end
-        
-            
+      begin match Dict.lookup x env.vars with
+        | None ->
+          ([], T.Variable (identifier x))
+        | Some e ->
+          ([], e)
+      end
+    | S.Define (vdef, a) ->
+      let next_def, e_ = expression env a in
+      begin match vdef with
+        | SimpleValue(id, e) ->
+          let fs, e = expression (reset_vars env) e in
+          fs @ next_def, defines [(identifier id, e)] e_
+        | RecFunctions fdefs ->
+          let fs, defs = define_recursive_functions fdefs in
+          fs @ next_def, defines defs e_
+      end
+
     | S.Apply (a, bs) ->
-         failwith "Students! This is your job!"
+      let afs , a = expression env a in
+      let efs, bs_ = expressions env bs in
+      begin match a with
+      | T.Variable(T.Id s) as s_ ->
+        let e =
+          if List.mem s predefined_functions || FopixInterpreter.is_binary_primitive s then
+            T.FunCall (T.FunId s, bs_)
+          else
+            T.UnknownFunCall (read_block s_ (lint 0), bs_ @ [s_])
+        in
+        afs @ efs, e
+      | _ ->
+        let id = make_fresh_variable () in
+        let var = T.Variable id in
+        let instr = T.UnknownFunCall ((read_block var (lint 0)), bs_ @ [var]) in
+        afs @ efs, T.Define (id, a, instr)
+      end
+
     | S.IfThenElse (a, b, c) ->
       let afs, a = expression env a in
       let bfs, b = expression env b in
       let cfs, c = expression env c in
       afs @ bfs @ cfs, T.IfThenElse (a, b, c)
 
-    | S.Fun (x, e) ->
-         failwith "Students! This is your job!"
+    | S.Fun (x, e) as f ->
+      let def_list, e = make_fun env x e (free_variables f) in
+      (def_list, e)
+
     | S.AllocateBlock a ->
       let afs, a = expression env a in
       (afs, allocate_block a)
+
     | S.WriteBlock (a, b, c) ->
       let afs, a = expression env a in
       let bfs, b = expression env b in
       let cfs, c = expression env c in
-      afs @ bfs @ cfs,
-      T.FunCall (T.FunId "write_block", [a; b; c])
+      afs @ bfs @ cfs, T.FunCall (T.FunId "write_block", [a; b; c])
+
     | S.ReadBlock (a, b) ->
       let afs, a = expression env a in
       let bfs, b = expression env b in
-      afs @ bfs,
-      T.FunCall (T.FunId "read_block", [a; b])
+      afs @ bfs, T.FunCall (T.FunId "read_block", [a; b])
+
     | S.Switch (a, bs, default) ->
       let afs, a = expression env a in
       let bsfs, bs =
@@ -278,12 +330,40 @@ let translate (p : S.t) env =
                   ) [] (Array.to_list bs)
       in
       let dfs, default = match default with
-        | None -> [], None
-        | Some e -> let bs, e = expression env e in bs, Some e
+        | None -> ([], None)
+        | Some e ->
+          let bs, e = expression env e in
+          (bs, Some e)
       in
-      afs @ bsfs @ dfs,
-      T.Switch (a, Array.of_list bs, default)
+      afs @ bsfs @ dfs, T.Switch (a, Array.of_list bs, default)
 
+  and make_fun env ids e free_vars =
+    let fun_id = make_fresh_function_identifier () in
+    let clo_id = make_fresh_variable () in
+    let clo_var = T.Variable clo_id in
+
+    let self = T.Id "self" in
+
+    let block = allocate_block (lint (List.length free_vars + 1)) in
+    let (env, _, insts) =
+      List.fold_right (fun id (env, i, acc) ->
+        let i' = lint i in
+        let (_, e) = expression env (S.Variable id) in
+        let acc_ = write_block clo_var i' e in
+        let new_env = bind_vars id (read_block (T.Variable self) i') env in
+        (new_env, i + 1, acc_::acc)
+      ) free_vars (env, 1, []) in
+    let (def_list, e) = expression env e in
+
+    let ids = List.map identifier ids in
+    let t_fun = T.DefineFunction (fun_id, ids @ [self], e) in
+
+    let fun_ptr_inst = write_block clo_var (lint 0) (T.Literal (T.LFun (fun_id))) in
+
+    let insts = seqs (List.rev (clo_var :: insts @ [fun_ptr_inst])) in
+    let closure = T.Define (clo_id, block, insts) in
+
+    def_list @ [t_fun], closure
 
   and expressions env = function
     | [] ->

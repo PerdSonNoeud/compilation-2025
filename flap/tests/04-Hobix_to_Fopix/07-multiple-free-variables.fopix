@@ -1,0 +1,13 @@
+val f =
+  _1
+  (
+    val x =
+      val y = val t = _2 (call (`+`) with (k, x)) ; 0 ; x
+      ;
+    call (`+`) with (z, 1)
+  )
+val main =
+  call
+  (print_int)
+  with
+  (call (call (f) with (21)) with (20))

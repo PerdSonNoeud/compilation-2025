@@ -1,0 +1,22 @@
+val f =
+  _1
+  (
+    val g = call (g) with (call (`+`) with (x, 1)) ;
+    _2
+    (
+      val h = call (h) with (call (`+`) with (y, 1)) ;
+      _3
+      (
+        val i = call (i) with (call (`+`) with (z, 1)) ;
+        _4
+        (
+          call
+          (`+`)
+          with
+          (call (`+`) with (call (`+`) with (x, y), z), t)
+        )
+      )
+    )
+  )
+val main =
+  call (print_int) with (call (f) with (3))
