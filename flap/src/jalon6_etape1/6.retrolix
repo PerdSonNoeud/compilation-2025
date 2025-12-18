@@ -1,0 +1,25 @@
+external observe_int
+
+def fact()
+local n, r:
+  l0: n <- copy %rdi;
+  l1: r <- copy 1;
+test:
+  l2: jumpif eq n, 0 -> fin, step;
+step:
+  l3: r <- mul r, n;
+  l4: n <- sub n, 1;
+  l5: jump test;
+fin:
+  l6: %rax <- copy r;
+  l7: ret;
+end
+
+globals (x)
+  l0: %rdi <- copy 5;
+  l1: fact();
+  l2: x <- copy %rax;
+  l3: %rdi <- copy x;
+  l4: observe_int();
+  l5: exit;
+end

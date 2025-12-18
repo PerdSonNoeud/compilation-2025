@@ -1,0 +1,7 @@
+
+
+globals ()
+  l0: %rdi <- copy 42;
+  l1: observe_int();
+  l2: exit;
+end

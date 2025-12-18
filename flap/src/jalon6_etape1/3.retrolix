@@ -1,0 +1,13 @@
+globals (res)
+local n:
+  l0: res <- copy 1;
+  l1: n <- copy 5;
+loop:
+  l2: jumpif eq n, 0 -> end, cont;
+cont:
+  l3: res <- mul res, n;
+  l4: n <- sub n, 1;
+  l5: jump loop;
+end:
+  l6: exit;
+end

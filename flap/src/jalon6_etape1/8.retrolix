@@ -1,0 +1,25 @@
+def add_eight_int(v7, v8)
+local res:
+  l0: res <- add %rdi, %rsi;
+  l1: res <- add res, %rdx;
+  l2: res <- add res, %rcx;
+  l3: res <- add res, %r8;
+  l4: res <- add res, %r9;
+  l5: res <- add res, v7;
+  l6: res <- add res, v8;
+  l7: %rax <- copy res;
+  l8: ret;
+end
+
+globals ()
+  l0: %rdi <- copy 1;
+  l1: %rsi <- copy 2;
+  l2: %rdx <- copy 3;
+  l3: %rcx <- copy 4;
+  l4: %r8  <- copy 5;
+  l5: %r9  <- copy 6;
+  l6: add_eight_int(7, 8);
+  l7: %rdi <- copy %rax;
+  l8: observe_int();
+  l9: exit;
+end
