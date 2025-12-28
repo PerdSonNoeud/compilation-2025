@@ -502,34 +502,45 @@ module InstructionSelector : InstructionSelector =
     open T
 
     let mov ~(dst : dst) ~(src : src) =
-      failwith "Students! This is your job!"
+      match src, dst with
+      | `Imm _, `Reg _ | `Reg _, `Reg _ | `Addr _, `Reg _ 
+      | `Imm _, `Addr _ | `Reg _, `Addr _ -> 
+          insns [ movq ~src ~dst ]
+      | `Addr _, `Addr _ ->
+          insns [ movq ~src ~dst:scratch; movq ~src:scratch ~dst ]
 
     let bin ins ~dst ~srcl ~srcr =
-      failwith "Students! This is your job!"
+      let load = mov ~dst:scratch ~src:srcl in
+      let compute = match ins with
+        | `Add -> insns [ addq ~src:srcr ~dst:scratch ]
+        | `Sub -> insns [ subq ~src:srcr ~dst:scratch ]
+        | `Mul -> insns [ imulq ~src:srcr ~dst:scratch ]
+      in
+      load @ compute @ (mov ~dst ~src:scratch)
 
     let add ~dst ~srcl ~srcr =
-      failwith "Students! This is your job!"
+      bin `Add ~dst ~srcl ~srcr
 
     let sub ~dst ~srcl ~srcr =
-      failwith "Students! This is your job!"
+      bin `Sub ~dst ~srcl ~srcr
 
     let mul ~dst ~srcl ~srcr =
-      failwith "Students! This is your job!"
+      bin `Mul ~dst ~srcl ~srcr
 
     let div ~dst ~srcl ~srcr =
-      failwith "Students! This is your job!"
+      failwith "Students! This is your job! div"
 
     let andl ~dst ~srcl ~srcr =
-      failwith "Students! This is your job!"
+      failwith "Students! This is your job! and"
 
     let orl ~dst ~srcl ~srcr =
-      failwith "Students! This is your job!"
+      failwith "Students! This is your job! or"
 
     let conditional_jump ~cc ~srcl ~srcr ~ll ~lr =
-      failwith "Students! This is your job!"
+      failwith "Students! This is your job! jump"
 
     let switch ?default ~discriminant ~cases () =
-      failwith "Students! This is your job!"
+      failwith "Students! This is your job! switch"
 
   end
 
@@ -563,7 +574,9 @@ module FrameManager(IS : InstructionSelector) : FrameManager =
       { param_count = 0; locals_space = 0; stack_map = S.IdMap.empty; }
 
     let location_of fd id =
-      failwith "Students! This is your job!"
+      let label_name = data_label_of_global id in
+      T.addr ~offset:(T.Lab label_name) ~base:X86_64_Architecture.RIP (* Ajout du registre RIP *)
+        ()
 
     let function_prologue fd =
       (* Student! Implement me! *)
@@ -574,7 +587,10 @@ module FrameManager(IS : InstructionSelector) : FrameManager =
       []
 
     let call fd ~kind ~f ~args =
-      failwith "Students! This is your job!"
+      let open T in
+        match f with
+            | `Imm imm -> [ Instruction (calld ~tgt:imm) ]
+            | _ -> failwith "faire le call"
 
   end
 
