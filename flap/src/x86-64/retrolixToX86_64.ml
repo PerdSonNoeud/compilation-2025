@@ -596,9 +596,33 @@ module FrameManager(IS : InstructionSelector) : FrameManager =
 
     let call fd ~kind ~f ~args =
       let open T in
-        match f with
-            | `Imm imm -> [ Instruction (calld ~tgt:imm) ]
-            | _ -> failwith "faire le call"
+      let open X86_64_Architecture in
+      let arg_regs = [ RDI; RSI; RDX; RCX; R8; R9 ] in
+      let rec dispatch i args regs setup_insns stack_args =
+        match args, regs with
+        | [], _ -> (setup_insns, stack_args)
+        | a :: a_rest, r :: r_rest ->
+            let insns = setup_insns @ IS.mov ~dst:(`Reg r) ~src:a in
+            dispatch (i + 1) a_rest r_rest insns stack_args
+        | a :: a_rest, [] ->
+            dispatch (i + 1) a_rest [] setup_insns (a :: stack_args)
+      in
+
+      let reg_setup, stack_setup = dispatch 0 args arg_regs [] [] in
+      let push_insns = List.concat (List.map (fun a -> [ Instruction (pushq ~src:a) ]) stack_setup) in
+      let call_insn = match f with
+        | `Imm imm -> Instruction (calld ~tgt:imm)
+        | #dst as d -> Instruction (calli ~tgt:d)
+        | _ -> failwith "Unsupported call target"
+      in
+      let stack_cleanup = 
+        let n = List.length stack_setup in
+        if n > 0 then 
+          [ Instruction (addq ~src:(liti (n * 8)) ~dst:rsp) ]
+        else []
+      in
+
+      reg_setup @ push_insns @ [ call_insn ] @ stack_cleanup
 
   end
 
