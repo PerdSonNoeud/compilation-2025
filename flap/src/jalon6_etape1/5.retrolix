@@ -1,15 +1,6 @@
-
-
 globals (s)
-  l0: %rdi <- copy 1;
-  l1: %rsi <- copy 2;
-  l2: %rdx <- copy 3;
-  l3: %rcx <- copy 4;
-  l4: %r8  <- copy 5;
-  l5: %r9  <- copy 6;
-  l6: add_eight_int(7, 8);
-  l7: s <- copy %rax;
-  l8: %rdi <- copy s;
-  l9: observe_int();
-  la: exit;
+  l0: add_eight_int(1, 2, 3, 4, 5, 6, 7, 8);
+  l1: s <- copy %rax;
+  l2: observe_int(s); 
+  l3: exit;
 end
