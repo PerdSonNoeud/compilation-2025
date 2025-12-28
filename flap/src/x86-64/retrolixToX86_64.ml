@@ -537,7 +537,15 @@ module InstructionSelector : InstructionSelector =
       failwith "Students! This is your job! or"
 
     let conditional_jump ~cc ~srcl ~srcr ~ll ~lr =
-      failwith "Students! This is your job! jump"
+      let open T in
+      let load_l = [ Instruction (movq ~src:srcl ~dst:scratch) ] in
+      let compare = [ Instruction (cmpq ~src1:srcr ~src2:scratch) ] in
+      let jumps = [
+        Instruction (jcc ~cc ~tgt:(Lab ll));
+        Instruction (jmpl ~tgt:lr)
+      ] in
+      
+      load_l @ compare @ jumps
 
     let switch ?default ~discriminant ~cases () =
       failwith "Students! This is your job! switch"
