@@ -15,5 +15,7 @@ globals (x)
   l0: %rdi <- copy 5;
   l1: fact();
   l2: x <- copy %rax;
-  l3: exit;
+  l3: %rdi <- copy x;
+  l4: observe_int();
+  l5: exit;
 end
