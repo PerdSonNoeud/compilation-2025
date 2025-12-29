@@ -502,34 +502,72 @@ module InstructionSelector : InstructionSelector =
     open T
 
     let mov ~(dst : dst) ~(src : src) =
-      failwith "Students! This is your job!"
+      match src, dst with
+      | `Imm _, `Reg _ | `Reg _, `Reg _ | `Addr _, `Reg _ 
+      | `Imm _, `Addr _ | `Reg _, `Addr _ -> 
+          insns [ movq ~src ~dst ]
+      | `Addr _, `Addr _ ->
+          insns [ movq ~src ~dst:scratch; movq ~src:scratch ~dst ]
 
     let bin ins ~dst ~srcl ~srcr =
-      failwith "Students! This is your job!"
+      let load = mov ~dst:scratch ~src:srcl in
+      let compute = match ins with
+        | `Add -> insns [ addq ~src:srcr ~dst:scratch ]
+        | `Sub -> insns [ subq ~src:srcr ~dst:scratch ]
+        | `Mul -> insns [ imulq ~src:srcr ~dst:scratch ]
+      in
+      load @ compute @ (mov ~dst ~src:scratch)
 
     let add ~dst ~srcl ~srcr =
-      failwith "Students! This is your job!"
+      bin `Add ~dst ~srcl ~srcr
 
     let sub ~dst ~srcl ~srcr =
-      failwith "Students! This is your job!"
+      bin `Sub ~dst ~srcl ~srcr
 
     let mul ~dst ~srcl ~srcr =
-      failwith "Students! This is your job!"
+      bin `Mul ~dst ~srcl ~srcr
 
     let div ~dst ~srcl ~srcr =
-      failwith "Students! This is your job!"
+      let open T in
+      let open X86_64_Architecture in
+      mov ~dst:(`Reg RAX) ~src:srcl @
+      [ Instruction (cqto) ] @
+      mov ~dst:scratch ~src:srcr @
+      [ Instruction (idivq ~src:scratch) ] @
+      mov ~dst ~src:(`Reg RAX)
 
     let andl ~dst ~srcl ~srcr =
-      failwith "Students! This is your job!"
+      let load = mov ~dst:scratch ~src:srcl in
+      load @ [ Instruction (T.andq ~src:srcr ~dst:scratch) ] @ (mov ~dst ~src:scratch)
 
     let orl ~dst ~srcl ~srcr =
-      failwith "Students! This is your job!"
+      let load = mov ~dst:scratch ~src:srcl in
+      load @ [ Instruction (T.orq ~src:srcr ~dst:scratch) ] @ (mov ~dst ~src:scratch)
 
     let conditional_jump ~cc ~srcl ~srcr ~ll ~lr =
-      failwith "Students! This is your job!"
+      let open T in
+      let load_l = [ Instruction (movq ~src:srcl ~dst:scratch) ] in
+      let compare = [ Instruction (cmpq ~src1:srcr ~src2:scratch) ] in
+      let jumps = [
+        Instruction (jcc ~cc ~tgt:(Lab ll));
+        Instruction (jmpl ~tgt:lr)
+      ] in
+      
+      load_l @ compare @ jumps
 
     let switch ?default ~discriminant ~cases () =
-      failwith "Students! This is your job!"
+      let open T in
+      let rec build_switch i =
+        if i >= Array.length cases then
+          match default with 
+          | Some l -> [ Instruction (jmpl ~tgt:l) ]
+          | None -> []
+        else
+          let next_case = build_switch (i + 1) in
+          [ Instruction (cmpq ~src1:(liti i) ~src2:discriminant);
+            Instruction (jcc ~cc:E ~tgt:(Lab cases.(i))) ] @ next_case
+      in
+      mov ~dst:scratch ~src:discriminant @ build_switch 0
 
   end
 
@@ -559,23 +597,74 @@ module FrameManager(IS : InstructionSelector) : FrameManager =
       + fd.locals_space
 
     let frame_descriptor ~params ~locals =
-      (* Student! Implement me! *)
-      { param_count = 0; locals_space = 0; stack_map = S.IdMap.empty; }
+      let word_size = 8 in
+      let _, stack_map = List.fold_left (fun (i, map) id ->
+        if i < 6 then (i + 1, map) 
+        else 
+          let offset = Mint.of_int ((i - 6 + 2) * word_size) in
+          (i + 1, S.IdMap.add id offset map)
+      ) (0, S.IdMap.empty) params in
+
+      let locals_space, stack_map = List.fold_left (fun (offset, map) id ->
+        let new_offset = offset + word_size in
+        (new_offset, S.IdMap.add id (Mint.of_int (-new_offset)) map)
+      ) (0, stack_map) locals in
+
+      { 
+        param_count = List.length params; 
+        locals_space; 
+        stack_map 
+      }
 
     let location_of fd id =
-      failwith "Students! This is your job!"
+      match S.IdMap.find_opt id fd.stack_map with
+      | Some offset ->
+          T.addr ~offset:(T.Lit offset) ~base:X86_64_Architecture.RBP ()
+      | None ->
+          let label_name = data_label_of_global id in
+          T.addr ~offset:(T.Lab label_name) ~base:X86_64_Architecture.RIP ()
 
     let function_prologue fd =
-      (* Student! Implement me! *)
-      []
+      let open T in
+      let open X86_64_Architecture in
+      [ Instruction (pushq ~src:rbp);
+        Instruction (movq ~src:rsp ~dst:rbp) ]
+      @ (if fd.locals_space > 0 then 
+          [ Instruction (subq ~src:(liti fd.locals_space) ~dst:rsp) ] 
+         else [])
 
     let function_epilogue fd =
-      (* Student! Implement me! *)
-      []
+      let open T in
+      let open X86_64_Architecture in
+      [ Instruction (movq ~src:rbp ~dst:rsp);
+        Instruction (popq ~dst:rbp) ]
 
     let call fd ~kind ~f ~args =
-      failwith "Students! This is your job!"
+      let open T in
+      let open X86_64_Architecture in
+      let arg_regs = [ RDI; RSI; RDX; RCX; R8; R9 ] in
 
+      let reg_setup, stack_setup =
+        if ((List.length args) mod 2 = 1) then
+          [T.Instruction (subq ~src:(T.liti 8) ~dst:rsp)],
+          [T.Instruction (addq ~src:(T.liti 8) ~dst:rsp)]
+        else
+          [], []
+      in
+      let push_insns = List.rev (List.map (fun a -> Instruction (pushq ~src:a)) args) in
+      let call_insn = Instruction (calldi ~tgt:f) in
+      let stack_cleanup =
+        let n = List.length args in
+        if n > 0 then
+          [ Instruction (addq ~src:(liti (n * 8)) ~dst:rsp) ]
+        else []
+      in
+      begin match kind with
+      | `Normal ->
+        reg_setup @ push_insns @ [ call_insn ] @ stack_cleanup @ stack_setup
+      | `Tail ->
+        function_epilogue fd @ [T.Instruction (T.jmpdi ~tgt:f)]
+      end
   end
 
 module CG =
