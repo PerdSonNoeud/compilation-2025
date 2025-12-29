@@ -32,8 +32,11 @@ print_six_int_for_real:
 	movq -32(%rbp), %r8
 	movq -40(%rbp), %r9
 	movq $0, %rax
-	movq -48(%rbp), %rdi
+	subq $8, %rsp
+	pushq -48(%rbp)
 	call printf
+	addq $8, %rsp
+	addq $8, %rsp
 	movq %rbp, %rsp
 	popq %rbp
 	ret

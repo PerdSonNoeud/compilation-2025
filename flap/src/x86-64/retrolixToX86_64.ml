@@ -643,34 +643,27 @@ module FrameManager(IS : InstructionSelector) : FrameManager =
       let open T in
       let open X86_64_Architecture in
       let arg_regs = [ RDI; RSI; RDX; RCX; R8; R9 ] in
-      let rec dispatch i args regs setup_insns stack_args =
-        match args, regs with
-        | [], _ -> (setup_insns, stack_args)
-        | a :: a_rest, r :: r_rest ->
-            let insns = setup_insns @ IS.mov ~dst:(`Reg r) ~src:a in
-            dispatch (i + 1) a_rest r_rest insns stack_args
-        | a :: a_rest, [] ->
-            dispatch (i + 1) a_rest [] setup_insns (a :: stack_args)
-      in
 
-      let reg_setup, stack_setup = dispatch 0 args arg_regs [] [] in
-      let push_insns = List.concat (List.map (fun a -> [ Instruction (pushq ~src:a) ]) stack_setup) in
-      let call_insn = match f with
-        | `Imm imm -> Instruction (calld ~tgt:imm)
-        | #dst as d -> Instruction (calli ~tgt:d)
-        | _ -> failwith "Unsupported call target"
+      let reg_setup, stack_setup =
+        if ((List.length args) mod 2 = 1) then
+          [T.Instruction (subq ~src:(T.liti 8) ~dst:rsp)],
+          [T.Instruction (addq ~src:(T.liti 8) ~dst:rsp)]
+        else
+          [], []
       in
+      let push_insns = List.rev (List.map (fun a -> Instruction (pushq ~src:a)) args) in
+      let call_insn = Instruction (calldi ~tgt:f) in
       let stack_cleanup =
-        let n = List.length stack_setup in
+        let n = List.length args in
         if n > 0 then
           [ Instruction (addq ~src:(liti (n * 8)) ~dst:rsp) ]
         else []
       in
       begin match kind with
       | `Normal ->
-        reg_setup @ push_insns @ [ call_insn ] @ stack_cleanup
+        reg_setup @ push_insns @ [ call_insn ] @ stack_cleanup @ stack_setup
       | `Tail ->
-        function_epilogue fd @ [Instruction (jmpdi ~tgt:f)]
+        function_epilogue fd @ [T.Instruction (T.jmpdi ~tgt:f)]
       end
   end
 
