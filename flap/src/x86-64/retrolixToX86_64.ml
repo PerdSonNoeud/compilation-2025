@@ -660,15 +660,18 @@ module FrameManager(IS : InstructionSelector) : FrameManager =
         | #dst as d -> Instruction (calli ~tgt:d)
         | _ -> failwith "Unsupported call target"
       in
-      let stack_cleanup = 
+      let stack_cleanup =
         let n = List.length stack_setup in
-        if n > 0 then 
+        if n > 0 then
           [ Instruction (addq ~src:(liti (n * 8)) ~dst:rsp) ]
         else []
       in
-
-      reg_setup @ push_insns @ [ call_insn ] @ stack_cleanup
-
+      begin match kind with
+      | `Normal ->
+        reg_setup @ push_insns @ [ call_insn ] @ stack_cleanup
+      | `Tail ->
+        function_epilogue fd @ [Instruction (jmpdi ~tgt:f)]
+      end
   end
 
 module CG =
